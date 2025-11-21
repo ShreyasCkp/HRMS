@@ -38,7 +38,7 @@ httpx>=0.23,<1
 
 # Useful utilities
 python-dateutil==2.9.0
-pytz==2024.7
+pytz==2024.2
 
 # Packaging/build tools
 pip==25.1.1
