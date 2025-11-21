@@ -26,7 +26,7 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y jq curl
 
-      - name: Setup Python
+      - name: Setup Python for build step (local runner)
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -54,26 +54,35 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Validate RG & WebApp
+      - name: Ensure Web App runtime = Python and enable build-on-deploy
         env:
           AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
+          PY_VER: ${{ env.PYTHON_VERSION }}
         run: |
           set -euo pipefail
-          if [ -z "${AZ_RESOURCE_GROUP:-}" ]; then
-            echo "Missing AZ_RESOURCE_GROUP secret"; exit 1
-          fi
-          az account show || true
-          az group show --name "$AZ_RESOURCE_GROUP" -o json || (echo "RG not found"; exit 1)
-          az webapp show --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json || (echo "Webapp not found"; exit 1)
+          echo "Setting Linux Fx and app settings for Web App (ensures python is available to Kudu)..."
+          # set linux runtime stack to Python (example "PYTHON|3.10")
+          az webapp config set \
+            --resource-group "$AZ_RESOURCE_GROUP" \
+            --name "$AZ_WEBAPP_NAME" \
+            --linux-fx-version "PYTHON|${PY_VER}"
+          # Enable Oryx build during deployment so platform prepares runtime and installs requirements
+          az webapp config appsettings set \
+            --resource-group "$AZ_RESOURCE_GROUP" \
+            --name "$AZ_WEBAPP_NAME" \
+            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true WEBSITE_RUN_FROM_PACKAGE=1
 
-      - name: Deploy to Azure Web App
+          echo "Done. Current siteConfig.linuxFxVersion:"
+          az webapp show --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" -o json | jq -r '.siteConfig.linuxFxVersion'
+
+      - name: Deploy to Azure Web App (zip deploy via action)
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZ_WEBAPP_NAME }}
           slot-name: Production
 
-      - name: Get publish profile & run collectstatic + migrate
+      - name: Get publish profile & run collectstatic + migrate (use python3)
         env:
           AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
@@ -81,36 +90,82 @@ jobs:
           set -euo pipefail
           sudo apt-get update -y
           sudo apt-get install -y jq curl
+
           ARTIFACTS_DIR="$GITHUB_WORKSPACE/deploy-artifacts"
           mkdir -p "$ARTIFACTS_DIR"
-          PROFILES=$(az webapp deployment list-publishing-profiles --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json)
+
+          echo "Fetching publishing profiles..."
+          PROFILES=$(az webapp deployment list-publishing-profiles \
+            --name "$AZ_WEBAPP_NAME" \
+            --resource-group "$AZ_RESOURCE_GROUP" \
+            -o json)
           echo "$PROFILES" > "$ARTIFACTS_DIR/publish_profiles.json"
           PROFILE_COUNT=$(echo "$PROFILES" | jq 'length')
+          echo "Publish profiles returned: $PROFILE_COUNT"
           if [ "$PROFILE_COUNT" -eq 0 ]; then
-            echo "No publish profiles found"; exit 1
+            echo "ERROR: No publish profiles returned."
+            cat "$ARTIFACTS_DIR/publish_profiles.json"
+            exit 1
           fi
+
           PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl')
           USER=$(echo "$PROFILES" | jq -r '.[0].userName')
           PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD')
+
+          if [ -z "$PUBLISH_URL" ] || [ -z "$USER" ] || [ -z "$PASS" ]; then
+            echo "Missing publish profile values; dumping file:"
+            cat "$ARTIFACTS_DIR/publish_profiles.json"
+            exit 1
+          fi
+
           if [[ ! "$PUBLISH_URL" =~ ^https?:// ]]; then
             PUBLISH_URL="https://$PUBLISH_URL"
           fi
           SCM_URL="$PUBLISH_URL"
-          # run collectstatic and migrate with simple retries
-          for CMD in "python manage.py collectstatic --noinput" "python manage.py migrate --noinput"; do
-            OUT="$ARTIFACTS_DIR/$(echo "$CMD" | tr ' /' '_' | tr -cd '[:alnum:]_').json"
+          echo "Using SCM_URL: $SCM_URL"
+
+          # prefer python3; if your project needs a virtualenv under wwwroot, adjust dir accordingly
+          for CMD in "python3 manage.py collectstatic --noinput" "python3 manage.py migrate --noinput"; do
+            SAFE=$(echo "$CMD" | tr ' /' '_' | tr -cd '[:alnum:]_')
+            OUT="$ARTIFACTS_DIR/${SAFE}.json"
             PAYLOAD=$(printf '{"command":"%s","dir":"/home/site/wwwroot"}' "$CMD")
-            ATTEMPT=1
-            SUCCESS=0
-            while [ $ATTEMPT -le 3 ]; do
-              echo "Running: $CMD (attempt $ATTEMPT)"
-              curl -s -u "$USER:$PASS" "$SCM_URL/api/command" -H "Content-Type: application/json" -d "$PAYLOAD" -o "$OUT" && SUCCESS=1 && break || true
-              ATTEMPT=$((ATTEMPT+1))
+
+            attempt=1
+            success=0
+            while [ $attempt -le 3 ]; do
+              echo "Kudu run (attempt $attempt): $CMD"
+              curl -s -u "$USER:$PASS" "$SCM_URL/api/command" -H "Content-Type: application/json" -d "$PAYLOAD" -o "$OUT" && success=1 && break || true
+              attempt=$((attempt+1))
               sleep 2
             done
-            echo "=== Output for $CMD ==="
+
+            echo "=== Kudu output for: $CMD ==="
             cat "$OUT" || true
+
+            if [ "$success" -ne 1 ]; then
+              echo "Warning: command failed after retries: $CMD"
+              # try with plain 'python' as last resort
+              echo "Trying fallback 'python' once..."
+              PAYLOAD_FALLBACK=$(printf '{"command":"%s","dir":"/home/site/wwwroot"}' "${CMD/python3/python}")
+              curl -s -u "$USER:$PASS" "$SCM_URL/api/command" -H "Content-Type: application/json" -d "$PAYLOAD_FALLBACK" -o "$ARTIFACTS_DIR/fallback_${SAFE}.json" || true
+              echo "Fallback output:"
+              cat "$ARTIFACTS_DIR/fallback_${SAFE}.json" || true
+            fi
           done
+
+          echo "Fetching site listing for verification..."
+          curl -s -u "$USER:$PASS" "$SCM_URL/api/vfs/site/wwwroot/" -o "$ARTIFACTS_DIR/wwwroot.json" || true
+          curl -s -u "$USER:$PASS" "$SCM_URL/api/vfs/site/wwwroot/staticfiles" -o "$ARTIFACTS_DIR/staticfiles.json" || true
+          echo "Files in wwwroot:"
+          jq -r '.[].name' "$ARTIFACTS_DIR/wwwroot.json" || true
+          echo "Files in staticfiles:"
+          jq -r '.[].name' "$ARTIFACTS_DIR/staticfiles.json" || true
+
+      - name: Upload file list artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployed-file-lists
+          path: deploy-artifacts
 
       - name: Restart Web App
         env:
