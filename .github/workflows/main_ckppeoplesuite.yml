@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  PYTHON_VERSION: "3.10"
+  AZ_WEBAPP_NAME: "CKPPeopleSuite"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,16 +19,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ----------------------------
+      # Install system deps for native Python packages (pycairo, etc.)
+      # ----------------------------
+      - name: Install system dependencies for native builds
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            python3-dev \
+            libcairo2-dev \
+            libgirepository1.0-dev \
+            libglib2.0-dev \
+            libpng-dev \
+            libjpeg-dev \
+            libffi-dev \
+            git \
+            curl
+
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Create and Start virtual environment and Install dependencies
         run: |
           python -m venv antenv
           source antenv/bin/activate
-          pip install --upgrade pip
+          pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
 
       - name: List project files (for review)
@@ -65,51 +88,71 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_0EA1EFF70B6249D5841F2861A29886E1 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E84FA381A384446FBED047D7993DFEB4 }}
 
-      - name: 'Deploy to Azure Web App'
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'CKPPeopleSuite'
+          app-name: ${{ env.AZ_WEBAPP_NAME }}
           slot-name: 'Production'
 
-      # --- Post-deploy: run management commands on the remote webapp ---
-      # NOTE: ensure AZURE_RESOURCE_GROUP secret exists and that the app is Linux based with SSH enabled.
-      - name: Install Azure CLI (if not present) # azure/login provides az, but ensure we have the latest
-        uses: azure/CLI@v1
-        with:
-          inlineScript: |
-            az --version
+      # Ensure az CLI available (login step provides it, but make sure)
+      - name: Show az version
+        run: az --version
 
-      - name: Run collectstatic on Azure Web App
+      # ----------------------------
+      # Post-deploy: attempt SSH command (Linux App Service with SSH enabled)
+      # ----------------------------
+      - name: Run remote management commands via az webapp ssh (preferred for Linux)
+        if: always()
         env:
           AZ_SUBSCRIPTION: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E84FA381A384446FBED047D7993DFEB4 }}
           AZ_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-          AZ_WEBAPP_NAME: CKPPeopleSuite
+          AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
         run: |
-          echo "Running collectstatic on remote webapp..."
-          # run a command on the remote container via SSH command support
-          az webapp ssh --subscription "$AZ_SUBSCRIPTION" --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" --command "python manage.py collectstatic --noinput" || {
-            echo "az webapp ssh command failed. Ensure App Service is Linux and SSH is enabled. Exiting with non-fatal status."
-            exit 0
-          }
+          echo "Trying az webapp ssh to run collectstatic & migrate..."
+          set -e
+          az webapp ssh --subscription "$AZ_SUBSCRIPTION" --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" --command "python manage.py collectstatic --noinput && python manage.py migrate --noinput" && exit 0
+          echo "az webapp ssh failed or SSH not enabled. Will attempt Kudu fallback."
 
-      - name: Run migrations on Azure Web App
+      # ----------------------------
+      # KUDU fallback: use Kudu API to run commands (works for Windows & Linux App Service)
+      # Requires: AZURE_WEBAPP_PUBLISH_PROFILE (add this as a secret containing the publish profile XML)
+      # ----------------------------
+      - name: Kudu fallback - run collectstatic & migrate using Kudu API
+        if: always()
         env:
-          AZ_SUBSCRIPTION: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E84FA381A384446FBED047D7993DFEB4 }}
-          AZ_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-          AZ_WEBAPP_NAME: CKPPeopleSuite
+          AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
+          KUDU_PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}  # must be set in repo secrets
         run: |
-          echo "Running migrate on remote webapp..."
-          az webapp ssh --subscription "$AZ_SUBSCRIPTION" --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" --command "python manage.py migrate --noinput" || {
-            echo "az webapp ssh migrate command failed. Ensure App Service is Linux and SSH is enabled. Exiting with non-fatal status."
+          if [ -z "$KUDU_PUBLISH_PROFILE" ]; then
+            echo "No KUDU publish profile secret found. Skipping Kudu commands."
             exit 0
-          }
+          fi
+          echo "Parsing publish profile for scm url and credentials..."
+          echo "$KUDU_PUBLISH_PROFILE" > pubxml.xml
+          SCM_URL=$(xmllint --xpath "string(//publishProfile[@publishMethod='MSDeploy']/@msdeployServiceUrl)" pubxml.xml 2>/dev/null || true)
+          # fallback: look for publishProfile with publishMethod="MSDeploy" or "FTP"
+          if [ -z "$SCM_URL" ]; then
+            SCM_URL=$(xmllint --xpath "string(//publishProfile/@publishUrl)" pubxml.xml 2>/dev/null || true)
+          fi
+          PUSER=$(xmllint --xpath "string(//publishProfile/@userName)" pubxml.xml)
+          PPASS=$(xmllint --xpath "string(//publishProfile/@userPWD)" pubxml.xml)
+          if [ -z "$SCM_URL" ] || [ -z "$PUSER" ] || [ -z "$PPASS" ]; then
+            echo "Could not parse publish profile. Skipping Kudu commands."
+            exit 0
+          fi
+          echo "SCM URL: $SCM_URL"
+
+          # Kudu API: /api/command to run commands
+          echo "Running collectstatic via Kudu API..."
+          curl -s -X POST -u "$PUSER:$PPASS" "$SCM_URL/api/command" -H "Content-Type: application/json" -d '{"command":"python manage.py collectstatic --noinput","dir":"/home/site/wwwroot"}' | jq -r
+          echo "Running migrate via Kudu API..."
+          curl -s -X POST -u "$PUSER:$PPASS" "$SCM_URL/api/command" -H "Content-Type: application/json" -d '{"command":"python manage.py migrate --noinput","dir":"/home/site/wwwroot"}' | jq -r
 
       - name: Restart Web App
         env:
           AZ_SUBSCRIPTION: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E84FA381A384446FBED047D7993DFEB4 }}
           AZ_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-          AZ_WEBAPP_NAME: CKPPeopleSuite
+          AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
         run: |
-          echo "Restarting webapp to pick up static files and DB migrations..."
           az webapp restart --subscription "$AZ_SUBSCRIPTION" --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME"
