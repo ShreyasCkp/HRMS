@@ -1,7 +1,3 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-# More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
-
 name: Build and deploy Python app to Azure Web App - CKPPeopleSuite
 
 on:
@@ -14,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -24,15 +20,23 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 🛠️ Local Build Section (Optional)
-      # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step significantly increases deployment time and early detection is not critical for your workflow, you may remove this section to streamline the deployment process.
       - name: Create and Start virtual environment and Install dependencies
         run: |
           python -m venv antenv
           source antenv/bin/activate
+          pip install --upgrade pip
           pip install -r requirements.txt
-                
-      # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size. 
+
+      - name: List project files (for review)
+        run: |
+          pwd
+          echo "Top-level files and folders:"
+          ls -la
+          echo "smarthr_erp folder contents:"
+          ls -la smarthr_erp || true
+          echo "apps (masters, employee_management, ...):"
+          ls -la | grep -E "masters|employee_management|leave_management|attendance_management|payroll_management|performance_management|recruitment|chatbot|notifications|reports" || true
+
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
@@ -41,25 +45,19 @@ jobs:
             .
             !antenv/
 
-      # 🚫 Opting Out of Oryx Build
-      # If you prefer to disable the Oryx build process during deployment, follow these steps:
-      # 1. Remove the SCM_DO_BUILD_DURING_DEPLOYMENT app setting from your Azure App Service Environment variables.
-      # 2. Refer to sample workflows for alternative deployment strategies: https://github.com/Azure/actions-workflow-samples/tree/master/AppService
-      
-
   deploy:
     runs-on: ubuntu-latest
     needs: build
     permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+      id-token: write
+      contents: read
 
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: python-app
-      
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -73,4 +71,45 @@ jobs:
         with:
           app-name: 'CKPPeopleSuite'
           slot-name: 'Production'
-          
+
+      # --- Post-deploy: run management commands on the remote webapp ---
+      # NOTE: ensure AZURE_RESOURCE_GROUP secret exists and that the app is Linux based with SSH enabled.
+      - name: Install Azure CLI (if not present) # azure/login provides az, but ensure we have the latest
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            az --version
+
+      - name: Run collectstatic on Azure Web App
+        env:
+          AZ_SUBSCRIPTION: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E84FA381A384446FBED047D7993DFEB4 }}
+          AZ_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          AZ_WEBAPP_NAME: CKPPeopleSuite
+        run: |
+          echo "Running collectstatic on remote webapp..."
+          # run a command on the remote container via SSH command support
+          az webapp ssh --subscription "$AZ_SUBSCRIPTION" --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" --command "python manage.py collectstatic --noinput" || {
+            echo "az webapp ssh command failed. Ensure App Service is Linux and SSH is enabled. Exiting with non-fatal status."
+            exit 0
+          }
+
+      - name: Run migrations on Azure Web App
+        env:
+          AZ_SUBSCRIPTION: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E84FA381A384446FBED047D7993DFEB4 }}
+          AZ_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          AZ_WEBAPP_NAME: CKPPeopleSuite
+        run: |
+          echo "Running migrate on remote webapp..."
+          az webapp ssh --subscription "$AZ_SUBSCRIPTION" --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" --command "python manage.py migrate --noinput" || {
+            echo "az webapp ssh migrate command failed. Ensure App Service is Linux and SSH is enabled. Exiting with non-fatal status."
+            exit 0
+          }
+
+      - name: Restart Web App
+        env:
+          AZ_SUBSCRIPTION: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E84FA381A384446FBED047D7993DFEB4 }}
+          AZ_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          AZ_WEBAPP_NAME: CKPPeopleSuite
+        run: |
+          echo "Restarting webapp to pick up static files and DB migrations..."
+          az webapp restart --subscription "$AZ_SUBSCRIPTION" --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME"
