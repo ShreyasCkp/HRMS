@@ -9,8 +9,6 @@ on:
 env:
   PYTHON_VERSION: "3.10"
   AZ_WEBAPP_NAME: "CKPPeopleSuite"
-  # Local uploaded screenshot path (will be transformed to a URL by the system where needed)
-  PROJECT_SCREENSHOT_URL: "/mnt/data/b9ae4ced-c90f-4794-aeb0-e8100eab8249.png"
 
 jobs:
   build:
@@ -22,11 +20,9 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Install system deps for native Python packages (pycairo, weasyprint, xmllint, jq, etc.)
-      - name: Install system dependencies for native builds (Pango/Cairo/etc.)
+      - name: Install system dependencies
         run: |
           sudo apt-get update -y
-          # Try install common pango package names; if one is missing it won't fail the whole step
           sudo apt-get install -y --no-install-recommends \
             build-essential \
             pkg-config \
@@ -39,49 +35,28 @@ jobs:
             libjpeg-dev \
             libffi-dev \
             libxml2-utils \
-            libxslt1.1 \
-            libpq-dev \
-            libssl-dev \
             jq \
-            git \
-            curl || true
+            curl
 
-          # Install pango. On different images package name may differ; try both variants.
           if ! dpkg -s libpango-1.0-0 >/dev/null 2>&1; then
-            echo "libpango-1.0-0 not found by dpkg; attempt apt-get install libpango1.0-0 (alternate name)"
-            sudo apt-get install -y --no-install-recommends libpango1.0-0 || true
+            sudo apt-get install -y libpango1.0-0 || true
           else
-            sudo apt-get install -y --no-install-recommends libpango-1.0-0 || true
+            sudo apt-get install -y libpango-1.0-0 || true
           fi
 
-          # Show installed pango / cairo info for debugging
-          echo "=== Pango / Cairo installed packages ==="
-          dpkg -l | grep -E "pango|cairo|gdk-pixbuf" || true
-
-
-      - name: Set up Python version
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Create and activate virtual environment, install dependencies
+      - name: Create venv & install dependencies
         run: |
           python -m venv antenv
           source antenv/bin/activate
           pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
 
-      - name: List project files (for review)
-        run: |
-          pwd
-          echo "Top-level files and folders:"
-          ls -la
-          echo "smarthr_erp folder contents:"
-          ls -la smarthr_erp || true
-          echo "apps (masters, employee_management, ...):"
-          ls -la | grep -E "masters|employee_management|leave_management|attendance_management|payroll_management|performance_management|recruitment|chatbot|notifications|reports" || true
-
-      - name: Upload artifact for deployment jobs
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: python-app
@@ -97,14 +72,11 @@ jobs:
       contents: read
 
     steps:
-      - name: Download artifact from build job
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: python-app
 
-      # Login to Azure using the single AZURE_CREDENTIALS JSON secret (recommended)
-      # Create this secret by running:
-      # az ad sp create-for-rbac --name "CKPPeopleSuite-SP" --role contributor --scopes /subscriptions/<SUB_ID> --sdk-auth
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -112,115 +84,70 @@ jobs:
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
-        id: deploy-to-webapp
         with:
           app-name: ${{ env.AZ_WEBAPP_NAME }}
-          slot-name: 'Production'
+          slot-name: Production
 
-      - name: Show az version
-        run: az --version
-
-      # ----------------------------
-      # Post-deploy: attempt SSH command (Linux App Service with SSH enabled)
-      # Run collectstatic + migrate, then list files and save listings as artifacts
-      # ----------------------------
-      - name: Run collectstatic, migrate and list deployed files (SSH -> Kudu fallback)
-        if: always()
+      - name: Get publish profile & run collectstatic/migrate
         env:
-          AZ_SUBSCRIPTION: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E84FA381A384446FBED047D7993DFEB4 }}
-          AZ_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
-          KUDU_PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}  # optional; required for Kudu fallback & file fetch
         run: |
-          set -euo pipefail
-          echo "=== Post-deploy: Attempt SSH (preferred) or Kudu API fallback to run collectstatic & migrate and get file listings ==="
+          set -e
 
-          SSH_OK=0
+          sudo apt-get update -y
+          sudo apt-get install -y jq curl
+
           ARTIFACTS_DIR="$GITHUB_WORKSPACE/deploy-artifacts"
           mkdir -p "$ARTIFACTS_DIR"
 
-          # Try SSH first (works on Linux App Service with SSH enabled)
-          echo "Trying az webapp ssh..."
-          if az webapp ssh --subscription "$AZ_SUBSCRIPTION" --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" --command "python manage.py collectstatic --noinput && python manage.py migrate --noinput && echo '--- ROOT LIST ---' > /home/site/wwwroot/deployed-file-list.txt && ls -la /home/site/wwwroot >> /home/site/wwwroot/deployed-file-list.txt && echo '--- STATICFILES LIST ---' > /home/site/wwwroot/staticfiles-list.txt && if [ -d /home/site/wwwroot/staticfiles ]; then ls -la /home/site/wwwroot/staticfiles >> /home/site/wwwroot/staticfiles-list.txt; else echo 'staticfiles directory not present' >> /home/site/wwwroot/staticfiles-list.txt; fi"; then
-            echo "SSH executed commands successfully."
-            SSH_OK=1
-          else
-            echo "SSH failed (maybe not enabled) — attempting Kudu fallback."
+          PROFILES=$(az webapp deployment list-publishing-profiles \
+            --name "$AZ_WEBAPP_NAME" \
+            --resource-group "$AZ_RESOURCE_GROUP" \
+            -o json)
+
+          echo "$PROFILES" > "$ARTIFACTS_DIR/publish_profiles.json"
+
+          PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl')
+          USER=$(echo "$PROFILES" | jq -r '.[0].userName')
+          PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD')
+
+          if [[ ! "$PUBLISH_URL" =~ ^https?:// ]]; then
+            PUBLISH_URL="https://$PUBLISH_URL"
           fi
 
-          # If SSH succeeded and publish profile available, fetch the created list files via Kudu VFS
-          if [ "$SSH_OK" -eq 1 ] && [ -n "$KUDU_PUBLISH_PROFILE" ]; then
-            echo "$KUDU_PUBLISH_PROFILE" > pubxml.xml
-            # Try msdeploy URL first, fallback to publishUrl attribute
-            SCM_URL=$(xmllint --xpath "string(//publishProfile[@publishMethod='MSDeploy']/@msdeployServiceUrl)" pubxml.xml 2>/dev/null || true)
-            if [ -z "$SCM_URL" ]; then
-              SCM_URL=$(xmllint --xpath "string(//publishProfile/@publishUrl)" pubxml.xml 2>/dev/null || true)
-            fi
-            PUSER=$(xmllint --xpath "string(//publishProfile/@userName)" pubxml.xml)
-            PPASS=$(xmllint --xpath "string(//publishProfile/@userPWD)" pubxml.xml)
-            if [ -n "$SCM_URL" ] && [ -n "$PUSER" ] && [ -n "$PPASS" ]; then
-              echo "Fetching deployed listing files from Kudu VFS..."
-              curl -s -u "$PUSER:$PPASS" "$SCM_URL/api/vfs/site/wwwroot/deployed-file-list.txt" -o "$ARTIFACTS_DIR/deployed-file-list.txt" || true
-              curl -s -u "$PUSER:$PPASS" "$SCM_URL/api/vfs/site/wwwroot/staticfiles-list.txt" -o "$ARTIFACTS_DIR/staticfiles-list.txt" || true
-            else
-              echo "Could not parse publish profile to fetch files via Kudu."
-            fi
-          fi
+          SCM_URL="$PUBLISH_URL"
 
-          # If SSH not available, use Kudu API to run commands and capture outputs
-          if [ "$SSH_OK" -eq 0 ]; then
-            echo "Running Kudu API fallback (requires AZURE_WEBAPP_PUBLISH_PROFILE secret)..."
-            if [ -z "$KUDU_PUBLISH_PROFILE" ]; then
-              echo "No KUDU_PUBLISH_PROFILE secret set; skipping Kudu fallback."
-            else
-              echo "$KUDU_PUBLISH_PROFILE" > pubxml.xml
-              SCM_URL=$(xmllint --xpath "string(//publishProfile[@publishMethod='MSDeploy']/@msdeployServiceUrl)" pubxml.xml 2>/dev/null || true)
-              if [ -z "$SCM_URL" ]; then
-                SCM_URL=$(xmllint --xpath "string(//publishProfile/@publishUrl)" pubxml.xml 2>/dev/null || true)
-              fi
-              PUSER=$(xmllint --xpath "string(//publishProfile/@userName)" pubxml.xml)
-              PPASS=$(xmllint --xpath "string(//publishProfile/@userPWD)" pubxml.xml)
+          echo "Running collectstatic..."
+          curl -s -u "$USER:$PASS" "$SCM_URL/api/command" \
+            -H "Content-Type: application/json" \
+            -d '{"command": "python manage.py collectstatic --noinput", "dir": "/home/site/wwwroot"}' \
+            -o "$ARTIFACTS_DIR/collectstatic.json"
 
-              if [ -z "$SCM_URL" ] || [ -z "$PUSER" ] || [ -z "$PPASS" ]; then
-                echo "Publish profile parse failed; skipping Kudu fallback."
-              else
-                echo "Calling Kudu /api/command to run collectstatic..."
-                curl -s -X POST -u "$PUSER:$PPASS" "$SCM_URL/api/command" -H "Content-Type: application/json" -d '{"command":"python manage.py collectstatic --noinput","dir":"/home/site/wwwroot"}' -o "$ARTIFACTS_DIR/kudu-collectstatic.json" || true
+          echo "Running migrate..."
+          curl -s -u "$USER:$PASS" "$SCM_URL/api/command" \
+            -H "Content-Type: application/json" \
+            -d '{"command": "python manage.py migrate --noinput", "dir": "/home/site/wwwroot"}' \
+            -o "$ARTIFACTS_DIR/migrate.json"
 
-                echo "Calling Kudu /api/command to run migrate..."
-                curl -s -X POST -u "$PUSER:$PPASS" "$SCM_URL/api/command" -H "Content-Type: application/json" -d '{"command":"python manage.py migrate --noinput","dir":"/home/site/wwwroot"}' -o "$ARTIFACTS_DIR/kudu-migrate.json" || true
+          echo "Fetching site listing..."
+          curl -s -u "$USER:$PASS" "$SCM_URL/api/vfs/site/wwwroot/" \
+            -o "$ARTIFACTS_DIR/wwwroot.json"
 
-                echo "Getting VFS listing of /site/wwwroot..."
-                curl -s -u "$PUSER:$PPASS" "$SCM_URL/api/vfs/site/wwwroot/" -o "$ARTIFACTS_DIR/kudu-vfs-root.json" || true
-                curl -s -u "$PUSER:$PPASS" "$SCM_URL/api/vfs/site/wwwroot/staticfiles" -o "$ARTIFACTS_DIR/kudu-vfs-staticfiles.json" || true
-              fi
-            fi
-          fi
+          curl -s -u "$USER:$PASS" "$SCM_URL/api/vfs/site/wwwroot/staticfiles" \
+            -o "$ARTIFACTS_DIR/staticfiles.json"
 
-          # Always capture the workspace files (local copy) as a fallback reference
-          echo "Creating local workspace listing for reference..."
-          ls -la "$GITHUB_WORKSPACE" > "$ARTIFACTS_DIR/workspace-listing.txt" || true
-          find "$GITHUB_WORKSPACE" -maxdepth 5 -type f -print > "$ARTIFACTS_DIR/workspace-files.txt" || true
-
-          echo "Artifacts folder contents:"
-          ls -la "$ARTIFACTS_DIR" || true
-
-          # Create marker so next step can upload artifacts
-          echo "$ARTIFACTS_DIR" > "$GITHUB_WORKSPACE/deploy_artifacts_path.txt"
-
-      - name: Upload deployed file lists artifact
-        if: always()
+      - name: Upload file list artifacts
         uses: actions/upload-artifact@v4
         with:
           name: deployed-file-lists
-          path: ${{ github.workspace }}/deploy-artifacts
+          path: deploy-artifacts
 
-      # Finally restart the web app (requires the service principal to have appropriate permissions)
       - name: Restart Web App
         env:
-          AZ_SUBSCRIPTION: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E84FA381A384446FBED047D7993DFEB4 }}
-          AZ_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
         run: |
-          az webapp restart --subscription "$AZ_SUBSCRIPTION" --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME"
-
+          az webapp restart \
+            --resource-group "$AZ_RESOURCE_GROUP" \
+            --name "$AZ_WEBAPP_NAME"
