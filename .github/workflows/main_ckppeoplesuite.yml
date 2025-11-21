@@ -9,7 +9,6 @@ on:
 env:
   PYTHON_VERSION: "3.10"
   AZ_WEBAPP_NAME: "CKPPeopleSuite"
-  REFERENCE_SCREENSHOT: "/mnt/data/2488467a-de11-4f33-8a13-7a68b4c6513f.png" # local file path you uploaded
 
 permissions:
   contents: read
@@ -18,7 +17,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     env:
       DJANGO_SETTINGS_MODULE: ${{ secrets.DJANGO_SETTINGS_MODULE }}
       DB_NAME: ${{ secrets.DB_NAME }}
@@ -52,7 +50,7 @@ jobs:
         run: |
           set -e
           source antenv/bin/activate
-          # quick-install known missing package to let Django import apps during collectstatic
+          # quick-install common missing package so Django imports app modules during collectstatic
           python -m pip install num2words || true
 
           if [ -f manage.py ]; then
@@ -96,7 +94,7 @@ jobs:
           app-name: ${{ env.AZ_WEBAPP_NAME }}
           slot-name: Production
 
-      - name: Kudu: Run migrate (separate step)
+      - name: Kudu - Run migrate (separate step)
         env:
           AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
@@ -106,44 +104,55 @@ jobs:
           mkdir -p "$ART"
           sudo apt-get update -y
           sudo apt-get install -y jq curl || true
+
           echo "Fetching publishing profile for migrate..."
           PROFILES=$(az webapp deployment list-publishing-profiles --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json)
           echo "$PROFILES" > "$ART/publish_profiles.json"
+
           PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl // empty')
           USER=$(echo "$PROFILES" | jq -r '.[0].userName // empty')
           PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD // empty')
+
           if [ -z "$PUBLISH_URL" ] || [ -z "$USER" ] || [ -z "$PASS" ]; then
             echo "Publish profile missing; aborting migrate."
             cat "$ART/publish_profiles.json" || true
             exit 1
           fi
+
           if [[ ! "$PUBLISH_URL" =~ ^https?:// ]]; then
             PUBLISH_URL="https://$PUBLISH_URL"
           fi
+
           SCM="$PUBLISH_URL"
           echo "Kudu migrate endpoint: $SCM"
+
           DIRS=("/home/site/wwwroot" "/home/site/wwwroot/backend" "/home/site/wwwroot/src")
           MIGRATE_CMD="python3 manage.py migrate --noinput"
           MIGRATE_DONE=0
+
           for D in "${DIRS[@]}"; do
             echo "Trying migrate in $D ..."
             OUT="$ART/migrate_$(basename "$D").json"
-            curl -s -u "$USER:$PASS" "$SCM/api/command" -H "Content-Type: application/json" -d "{\"command\":\"$MIGRATE_CMD\",\"dir\":\"$D\"}" -o "$OUT" || true
+            curl -s -u "$USER:$PASS" "$SCM/api/command" \
+              -H "Content-Type: application/json" \
+              -d "{\"command\":\"$MIGRATE_CMD\",\"dir\":\"$D\"}" -o "$OUT" || true
             echo "migrate output for $D:"
             cat "$OUT" || true
-            # success heuristics: non-empty output and ExitCode 0 or Output contains something
+
             if grep -q '"ExitCode":0' "$OUT" 2>/dev/null || grep -q '"Output":' "$OUT" 2>/dev/null && ! grep -q 'No such file or directory' "$OUT" 2>/dev/null; then
               MIGRATE_DONE=1
               echo "migrate appears to have succeeded in $D"
               break
             fi
+
             echo "migrate failed in $D; trying next candidate."
           done
+
           if [ $MIGRATE_DONE -eq 0 ]; then
             echo "Warning: migrate did not succeed in any candidate directory. Inspect $ART/*.json"
           fi
 
-      - name: Kudu: Run collectstatic (separate step)
+      - name: Kudu - Run collectstatic (separate step)
         env:
           AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
@@ -151,43 +160,55 @@ jobs:
           set -euo pipefail
           ART="$GITHUB_WORKSPACE/deploy-artifacts"
           mkdir -p "$ART"
+
           echo "Fetching publishing profile for collectstatic..."
           PROFILES=$(az webapp deployment list-publishing-profiles --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json)
           echo "$PROFILES" > "$ART/publish_profiles.json"
+
           PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl // empty')
           USER=$(echo "$PROFILES" | jq -r '.[0].userName // empty')
           PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD // empty')
+
           if [ -z "$PUBLISH_URL" ] || [ -z "$USER" ] || [ -z "$PASS" ]; then
             echo "Publish profile missing; aborting collectstatic."
             cat "$ART/publish_profiles.json" || true
             exit 1
           fi
+
           if [[ ! "$PUBLISH_URL" =~ ^https?:// ]]; then
             PUBLISH_URL="https://$PUBLISH_URL"
           fi
+
           SCM="$PUBLISH_URL"
           echo "Kudu collectstatic endpoint: $SCM"
+
           DIRS=("/home/site/wwwroot" "/home/site/wwwroot/backend" "/home/site/wwwroot/src")
           COLLECT_CMD="python3 manage.py collectstatic --noinput"
           COLLECT_DONE=0
+
           for D in "${DIRS[@]}"; do
             echo "Trying collectstatic in $D ..."
             OUT="$ART/collect_$(basename "$D").json"
-            curl -s -u "$USER:$PASS" "$SCM/api/command" -H "Content-Type: application/json" -d "{\"command\":\"$COLLECT_CMD\",\"dir\":\"$D\"}" -o "$OUT" || true
+            curl -s -u "$USER:$PASS" "$SCM/api/command" \
+              -H "Content-Type: application/json" \
+              -d "{\"command\":\"$COLLECT_CMD\",\"dir\":\"$D\"}" -o "$OUT" || true
             echo "collectstatic output for $D:"
             cat "$OUT" || true
+
             if grep -q '"ExitCode":0' "$OUT" 2>/dev/null || grep -q '"Output":' "$OUT" 2>/dev/null && ! grep -q 'No such file or directory' "$OUT" 2>/dev/null; then
               COLLECT_DONE=1
               echo "collectstatic appears to have succeeded in $D"
               break
             fi
+
             echo "collectstatic failed in $D; trying next candidate."
           done
+
           if [ $COLLECT_DONE -eq 0 ]; then
             echo "Warning: collectstatic did not succeed in any candidate directory. Inspect $ART/*.json"
           fi
 
-      - name: Kudu: List deployed files (separate step)
+      - name: Kudu - List deployed files (separate step)
         env:
           AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
@@ -195,20 +216,25 @@ jobs:
           set -euo pipefail
           ART="$GITHUB_WORKSPACE/deploy-artifacts"
           mkdir -p "$ART"
+
           echo "Fetching publishing profile for listing..."
           PROFILES=$(az webapp deployment list-publishing-profiles --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json)
           echo "$PROFILES" > "$ART/publish_profiles.json"
+
           PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl // empty')
           USER=$(echo "$PROFILES" | jq -r '.[0].userName // empty')
           PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD // empty')
+
           if [ -z "$PUBLISH_URL" ] || [ -z "$USER" ] || [ -z "$PASS" ]; then
             echo "Publish profile missing; aborting listing."
             cat "$ART/publish_profiles.json" || true
             exit 1
           fi
+
           if [[ ! "$PUBLISH_URL" =~ ^https?:// ]]; then
             PUBLISH_URL="https://$PUBLISH_URL"
           fi
+
           SCM="$PUBLISH_URL"
           echo "Listing /home/site/wwwroot ..."
           curl -s -u "$USER:$PASS" "$SCM/api/vfs/site/wwwroot/" -o "$ART/wwwroot.json" || true
@@ -228,3 +254,5 @@ jobs:
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
         run: |
           az webapp restart --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME"
+
+# Reference screenshot (uploaded): /mnt/data/2488467a-de11-4f33-8a13-7a68b4c6513f.png
