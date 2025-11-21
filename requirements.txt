@@ -37,7 +37,7 @@ openai==1.109.1
 httpx>=0.23,<1
 
 # Useful utilities
-python-dateutil==2.9.1
+python-dateutil==2.9.0
 pytz==2024.7
 
 # Packaging/build tools
