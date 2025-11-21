@@ -9,6 +9,7 @@ on:
 env:
   PYTHON_VERSION: "3.10"
   AZ_WEBAPP_NAME: "CKPPeopleSuite"
+  ZIP_NAME: "app.zip"
 
 permissions:
   contents: read
@@ -24,18 +25,24 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y jq curl
+          sudo apt-get install -y zip jq curl
 
-      - name: Setup Python for build step (local runner)
+      - name: Setup Python on runner (optional, for local build tasks)
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Upload artifact
+      - name: Create zip package for deployment
+        run: |
+          # package entire repository into app.zip, exclude large virtualenvs if any
+          zip -r "${{ env.ZIP_NAME }}" . -x "**/antenv/**" "venv/**" ".git/**" ".github/**"
+          ls -l "${{ env.ZIP_NAME }}"
+
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: python-app
-          path: "./"
+          name: python-app-zip
+          path: ${{ env.ZIP_NAME }}
 
   deploy:
     needs: build
@@ -44,10 +51,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - name: Download artifact
+      - name: Download artifact (zip)
         uses: actions/download-artifact@v4
         with:
-          name: python-app
+          name: python-app-zip
+          path: .
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -61,26 +69,96 @@ jobs:
           PY_VER: ${{ env.PYTHON_VERSION }}
         run: |
           set -euo pipefail
-          echo "Setting Linux Fx and app settings for Web App (ensures python is available to Kudu)..."
-          # set linux runtime stack to Python (example "PYTHON|3.10")
+          echo "Setting linux runtime and app settings..."
           az webapp config set \
             --resource-group "$AZ_RESOURCE_GROUP" \
             --name "$AZ_WEBAPP_NAME" \
             --linux-fx-version "PYTHON|${PY_VER}"
-          # Enable Oryx build during deployment so platform prepares runtime and installs requirements
           az webapp config appsettings set \
             --resource-group "$AZ_RESOURCE_GROUP" \
             --name "$AZ_WEBAPP_NAME" \
             --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true WEBSITE_RUN_FROM_PACKAGE=1
-
-          echo "Done. Current siteConfig.linuxFxVersion:"
+          echo "linuxFxVersion:"
           az webapp show --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" -o json | jq -r '.siteConfig.linuxFxVersion'
 
-      - name: Deploy to Azure Web App (zip deploy via action)
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ env.AZ_WEBAPP_NAME }}
-          slot-name: Production
+      - name: Wait for Web App to be Running (avoid SCM restart race)
+        env:
+          AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
+          AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
+        run: |
+          set -euo pipefail
+          echo "Waiting for Web App 'Running' state (will try up to 30 times)..."
+          tries=0
+          while [ $tries -lt 30 ]; do
+            state=$(az webapp show --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" -o tsv --query "state" || echo "")
+            echo "Current state: '$state'"
+            if [ "$state" = "Running" ]; then
+              echo "App is Running"
+              break
+            fi
+            tries=$((tries+1))
+            sleep 5
+          done
+          if [ "$state" != "Running" ]; then
+            echo "App did not reach Running state after wait; continuing but this may cause deploy issues."
+          fi
+
+      - name: ZIP deploy using az (deterministic, avoids OneDeploy race)
+        env:
+          AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
+          AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
+          ZIP_NAME: ${{ env.ZIP_NAME }}
+        run: |
+          set -euo pipefail
+          echo "Starting ZIP deploy..."
+          az webapp deployment source config-zip \
+            --resource-group "$AZ_RESOURCE_GROUP" \
+            --name "$AZ_WEBAPP_NAME" \
+            --src "$ZIP_NAME"
+          echo "ZIP deploy command finished. Waiting a bit for Oryx to start build..."
+          sleep 8
+
+      - name: Wait for deployment to finish (poll Kudu deployments)
+        env:
+          AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
+          AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
+        run: |
+          set -euo pipefail
+          # poll the latest deployment until it's not in progress (status 4 = success, 3 = stopped/failed)
+          echo "Polling deployment list..."
+          attempts=0
+          latest_status=""
+          while [ $attempts -lt 40 ]; do
+            deployments=$(az webapp deployment list --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" -o json)
+            latest=$(echo "$deployments" | jq -r 'sort_by(.received_time) | last')
+            if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+              echo "No deployments found yet"
+              sleep 4
+              attempts=$((attempts+1))
+              continue
+            fi
+            status=$(echo "$latest" | jq -r '.status // empty')
+            id=$(echo "$latest" | jq -r '.id // empty')
+            msg=$(echo "$latest" | jq -r '.status_text // empty')
+            echo "Latest deploy status=$status text='$msg' id='$id'"
+            if [ "$status" = "4" ]; then
+              echo "Deployment succeeded"
+              latest_status="succeeded"
+              break
+            elif [ "$status" = "3" ]; then
+              echo "Deployment stopped/failed (status 3). Dumping latest log URL:"
+              echo "$latest" | jq -r '.log_url // empty'
+              latest_status="failed"
+              break
+            else
+              echo "Still in-progress or unknown status; waiting..."
+            fi
+            attempts=$((attempts+1))
+            sleep 5
+          done
+          if [ "$latest_status" != "succeeded" ]; then
+            echo "Deployment did not report success. Please inspect the deployment logs link above."
+          fi
 
       - name: Get publish profile & run collectstatic + migrate (use python3)
         env:
@@ -90,69 +168,55 @@ jobs:
           set -euo pipefail
           sudo apt-get update -y
           sudo apt-get install -y jq curl
-
           ARTIFACTS_DIR="$GITHUB_WORKSPACE/deploy-artifacts"
           mkdir -p "$ARTIFACTS_DIR"
-
           echo "Fetching publishing profiles..."
-          PROFILES=$(az webapp deployment list-publishing-profiles \
-            --name "$AZ_WEBAPP_NAME" \
-            --resource-group "$AZ_RESOURCE_GROUP" \
-            -o json)
+          PROFILES=$(az webapp deployment list-publishing-profiles --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json)
           echo "$PROFILES" > "$ARTIFACTS_DIR/publish_profiles.json"
-          PROFILE_COUNT=$(echo "$PROFILES" | jq 'length')
+          PROFILE_COUNT=$(echo "$PROFILES" | jq 'length' || echo 0)
           echo "Publish profiles returned: $PROFILE_COUNT"
           if [ "$PROFILE_COUNT" -eq 0 ]; then
             echo "ERROR: No publish profiles returned."
-            cat "$ARTIFACTS_DIR/publish_profiles.json"
+            cat "$ARTIFACTS_DIR/publish_profiles.json" || true
             exit 1
           fi
-
           PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl')
           USER=$(echo "$PROFILES" | jq -r '.[0].userName')
           PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD')
-
           if [ -z "$PUBLISH_URL" ] || [ -z "$USER" ] || [ -z "$PASS" ]; then
             echo "Missing publish profile values; dumping file:"
             cat "$ARTIFACTS_DIR/publish_profiles.json"
             exit 1
           fi
-
           if [[ ! "$PUBLISH_URL" =~ ^https?:// ]]; then
             PUBLISH_URL="https://$PUBLISH_URL"
           fi
           SCM_URL="$PUBLISH_URL"
           echo "Using SCM_URL: $SCM_URL"
-
-          # prefer python3; if your project needs a virtualenv under wwwroot, adjust dir accordingly
+          # Run Kudu commands with retries. If your manage.py is inside a subfolder, change dir accordingly.
           for CMD in "python3 manage.py collectstatic --noinput" "python3 manage.py migrate --noinput"; do
             SAFE=$(echo "$CMD" | tr ' /' '_' | tr -cd '[:alnum:]_')
             OUT="$ARTIFACTS_DIR/${SAFE}.json"
             PAYLOAD=$(printf '{"command":"%s","dir":"/home/site/wwwroot"}' "$CMD")
-
             attempt=1
             success=0
-            while [ $attempt -le 3 ]; do
+            while [ $attempt -le 6 ]; do
               echo "Kudu run (attempt $attempt): $CMD"
               curl -s -u "$USER:$PASS" "$SCM_URL/api/command" -H "Content-Type: application/json" -d "$PAYLOAD" -o "$OUT" && success=1 && break || true
               attempt=$((attempt+1))
-              sleep 2
+              sleep 5
             done
-
             echo "=== Kudu output for: $CMD ==="
             cat "$OUT" || true
-
             if [ "$success" -ne 1 ]; then
               echo "Warning: command failed after retries: $CMD"
-              # try with plain 'python' as last resort
-              echo "Trying fallback 'python' once..."
+              echo "Try fallback with 'python' once..."
               PAYLOAD_FALLBACK=$(printf '{"command":"%s","dir":"/home/site/wwwroot"}' "${CMD/python3/python}")
               curl -s -u "$USER:$PASS" "$SCM_URL/api/command" -H "Content-Type: application/json" -d "$PAYLOAD_FALLBACK" -o "$ARTIFACTS_DIR/fallback_${SAFE}.json" || true
               echo "Fallback output:"
               cat "$ARTIFACTS_DIR/fallback_${SAFE}.json" || true
             fi
           done
-
           echo "Fetching site listing for verification..."
           curl -s -u "$USER:$PASS" "$SCM_URL/api/vfs/site/wwwroot/" -o "$ARTIFACTS_DIR/wwwroot.json" || true
           curl -s -u "$USER:$PASS" "$SCM_URL/api/vfs/site/wwwroot/staticfiles" -o "$ARTIFACTS_DIR/staticfiles.json" || true
