@@ -1,6 +1,3 @@
-# main_ckppeoplesuite.yml
-# Reference screenshot (for debugging): /mnt/data/2488467a-de11-4f33-8a13-7a68b4c6513f.png
-
 name: Build and deploy Python app to Azure Web App - CKPPeopleSuite
 
 on:
@@ -12,7 +9,6 @@ on:
 env:
   PYTHON_VERSION: "3.10"
   AZ_WEBAPP_NAME: "CKPPeopleSuite"
-  ZIP_NAME: "app.zip"
 
 permissions:
   contents: read
@@ -44,49 +40,50 @@ jobs:
         run: |
           python -m venv antenv
           source antenv/bin/activate
-          pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip setuptools wheel
           if [ -f requirements.txt ]; then
-            pip install -r requirements.txt || echo "pip install returned non-zero; continuing"
+            python -m pip install -r requirements.txt || echo "pip install returned non-zero; continuing"
           else
             echo "No requirements.txt found — skipping pip install"
           fi
 
-      - name: (Optional) Collect static on runner (install ad-hoc missing deps first)
+      - name: (Optional) Collect static on runner (install missing deps first)
         run: |
+          set -e
           source antenv/bin/activate
-          # install any small runtime-only packages that may be missing (add more if Kudu later reports missing modules)
-          pip install num2words || true
+          # ensure num2words is available (quick fix for ModuleNotFoundError seen in CI)
+          echo "Ensuring known missing package 'num2words' is installed..."
+          python -m pip install num2words || true
 
           if [ -f manage.py ]; then
             echo "Running collectstatic on runner (optional)..."
-            python manage.py collectstatic --noinput || echo "collectstatic on runner failed; continuing"
+            # run collectstatic and capture output; if it fails show pip freeze to diagnose missing packages
+            if ! python manage.py collectstatic --noinput; then
+              echo "collectstatic failed — dumping pip freeze for debugging:"
+              python -m pip freeze || true
+              echo "collectstatic on runner failed; continuing (Kudu will try collectstatic after deploy)."
+            fi
           else
             echo "manage.py not found in repo root; skipping runner collectstatic"
           fi
 
-      - name: Create ZIP for deterministic deployment
-        run: |
-          zip -r "${{ env.ZIP_NAME }}" . -x "antenv/**" ".venv/**" "venv/**" ".git/**" ".github/**"
-          ls -lh "${{ env.ZIP_NAME }}"
-
-      - name: Upload zip artifact
+      - name: Upload artifact for deployment
         uses: actions/upload-artifact@v4
         with:
-          name: python-app-zip
-          path: ${{ env.ZIP_NAME }}
+          name: python-app
+          path: |
+            .
+            !antenv/
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
 
     steps:
-      - name: Download artifact (zip)
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: python-app-zip
+          name: python-app
           path: .
 
       - name: Login to Azure
@@ -94,18 +91,13 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: ZIP Deploy to Azure Web App (deterministic)
-        env:
-          AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
-          AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
-          ZIP_NAME: ${{ env.ZIP_NAME }}
-        run: |
-          set -euo pipefail
-          echo "Deploying ${ZIP_NAME} to ${AZ_WEBAPP_NAME}..."
-          az webapp deployment source config-zip --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME" --src "$ZIP_NAME"
-          echo "ZIP deploy command finished."
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZ_WEBAPP_NAME }}
+          slot-name: Production
 
-      - name: Run migrate & collectstatic via Kudu (tries common locations, with fallback to 'python')
+      - name: Run migrate, collectstatic and list files via Kudu
         env:
           AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
@@ -115,28 +107,25 @@ jobs:
           mkdir -p "$ART"
           sudo apt-get update -y
           sudo apt-get install -y jq curl || true
-
+          echo "Fetching publishing profile..."
           PROFILES=$(az webapp deployment list-publishing-profiles --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json)
           echo "$PROFILES" > "$ART/publish_profiles.json"
           PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl // empty')
           USER=$(echo "$PROFILES" | jq -r '.[0].userName // empty')
           PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD // empty')
-
           if [ -z "$PUBLISH_URL" ] || [ -z "$USER" ] || [ -z "$PASS" ]; then
-            echo "Publishing profile values missing; aborting Kudu commands."
+            echo "Publish profile missing; aborting Kudu operations."
             cat "$ART/publish_profiles.json" || true
             exit 1
           fi
-
           if [[ ! "$PUBLISH_URL" =~ ^https?:// ]]; then
             PUBLISH_URL="https://$PUBLISH_URL"
           fi
           SCM="$PUBLISH_URL"
-          echo "Kudu URL: $SCM"
-
+          echo "Kudu endpoint: $SCM"
+          # Candidate directories where manage.py might live
           DIRS=("/home/site/wwwroot" "/home/site/wwwroot/backend" "/home/site/wwwroot/src")
-
-          run_kudu() {
+          run_kudu_cmd() {
             CMD="$1"
             DIR="$2"
             SAFE=$(echo "$CMD" | tr ' /' '__' | tr -cd '[:alnum:]_')
@@ -145,30 +134,28 @@ jobs:
             SUCCESS=0
             while [ $ATTEMPT -le 4 ]; do
               echo "Attempt $ATTEMPT: $CMD (dir=$DIR)"
-              # try with python3; fallback to python
-              PAYLOAD=$(printf '{"command":"bash -lc \"python3 manage.py %s || python manage.py %s\"","dir":"%s"}' "${CMD#python3 manage.py }" "${CMD#python3 manage.py }" "$DIR")
-              curl -s -u "$USER:$PASS" "$SCM/api/command" -H "Content-Type: application/json" -d "$PAYLOAD" -o "$OUT" || true
+              curl -s -u "$USER:$PASS" "$SCM/api/command" \
+                -H "Content-Type: application/json" \
+                -d "{\"command\":\"$CMD\",\"dir\":\"$DIR\"}" -o "$OUT" || true
+              # consider success if Kudu returned anything; we'll inspect output
               if [ -s "$OUT" ]; then
                 SUCCESS=1
                 break
               fi
               ATTEMPT=$((ATTEMPT+1))
-              sleep 4
+              sleep 3
             done
-            echo "Saved Kudu output to $OUT"
+            echo "Saved output to $OUT"
             cat "$OUT" || true
             return $SUCCESS
           }
-
           MIGRATE_CMD="python3 manage.py migrate --noinput"
           COLLECT_CMD="python3 manage.py collectstatic --noinput"
-
           MIGRATE_DONE=0
           COLLECT_DONE=0
-
           for D in "${DIRS[@]}"; do
             if [ $MIGRATE_DONE -eq 0 ]; then
-              if run_kudu "$MIGRATE_CMD" "$D"; then
+              if run_kudu_cmd "$MIGRATE_CMD" "$D"; then
                 MIGRATE_DONE=1
                 echo "migrate succeeded in $D"
               else
@@ -176,7 +163,7 @@ jobs:
               fi
             fi
             if [ $COLLECT_DONE -eq 0 ]; then
-              if run_kudu "$COLLECT_CMD" "$D"; then
+              if run_kudu_cmd "$COLLECT_CMD" "$D"; then
                 COLLECT_DONE=1
                 echo "collectstatic succeeded in $D"
               else
@@ -187,14 +174,13 @@ jobs:
               break
             fi
           done
-
           if [ $MIGRATE_DONE -eq 0 ]; then
-            echo "Warning: migrate did not succeed in any candidate dir."
+            echo "Warning: migrate did not succeed in any candidate directory."
           fi
           if [ $COLLECT_DONE -eq 0 ]; then
-            echo "Warning: collectstatic did not succeed in any candidate dir."
+            echo "Warning: collectstatic did not succeed in any candidate directory."
           fi
-
+          # list files in wwwroot and staticfiles for verification
           curl -s -u "$USER:$PASS" "$SCM/api/vfs/site/wwwroot/" -o "$ART/wwwroot.json" || true
           curl -s -u "$USER:$PASS" "$SCM/api/vfs/site/wwwroot/staticfiles" -o "$ART/staticfiles.json" || true
           echo "Saved file lists to $ART"
@@ -211,5 +197,3 @@ jobs:
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
         run: |
           az webapp restart --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME"
-
-# Reference screenshot: /mnt/data/2488467a-de11-4f33-8a13-7a68b4c6513f.png
