@@ -9,7 +9,6 @@ on:
 env:
   PYTHON_VERSION: "3.10"
   AZ_WEBAPP_NAME: "CKPPeopleSuite"
-  # Screenshot you uploaded (for reference/debug): /mnt/data/2488467a-de11-4f33-8a13-7a68b4c6513f.png
 
 permissions:
   contents: read
@@ -18,54 +17,25 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install deps
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            pkg-config \
-            python3-dev \
-            libcairo2-dev \
-            libgirepository1.0-dev \
-            libglib2.0-dev \
-            libgdk-pixbuf2.0-0 \
-            libpng-dev \
-            libjpeg-dev \
-            libffi-dev \
-            libxml2-utils \
-            jq \
-            curl
-          # some Ubuntu variants use libpango1.0-0
-          sudo apt-get install -y libpango1.0-0 || true
+          sudo apt-get install -y jq curl
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create venv & install dependencies
-        run: |
-          python -m venv antenv
-          source antenv/bin/activate
-          pip install --upgrade pip setuptools wheel
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          else
-            echo "No requirements.txt found — skipping pip install"
-          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: |
-            .
-            !antenv/
+          path: "./"
 
   deploy:
     needs: build
@@ -73,7 +43,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -85,49 +54,26 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # --- Debug & validation (fail early if AZ_RESOURCE_GROUP missing / wrong) ---
-      - name: Debug: show Azure context & validate RG + Web App
+      - name: Validate RG & WebApp
         env:
           AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
         run: |
           set -euo pipefail
-          echo ">>> Debug: AZ_RESOURCE_GROUP='${AZ_RESOURCE_GROUP:-}'"
-          echo ">>> Debug: AZ_WEBAPP_NAME='${AZ_WEBAPP_NAME:-}'"
-
           if [ -z "${AZ_RESOURCE_GROUP:-}" ]; then
-            echo "ERROR: AZ_RESOURCE_GROUP is empty. Please create a repository secret named 'AZ_RESOURCE_GROUP' with the resource group name."
-            exit 1
+            echo "Missing AZ_RESOURCE_GROUP secret"; exit 1
           fi
-
-          echo "Azure account context:"
           az account show || true
+          az group show --name "$AZ_RESOURCE_GROUP" -o json || (echo "RG not found"; exit 1)
+          az webapp show --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json || (echo "Webapp not found"; exit 1)
 
-          echo "Checking resource group exists..."
-          if ! az group show --name "$AZ_RESOURCE_GROUP" -o json >/dev/null 2>&1; then
-            echo "Resource group '$AZ_RESOURCE_GROUP' NOT FOUND in current subscription."
-            echo "Listing resource groups visible in this subscription (table):"
-            az group list -o table
-            exit 1
-          fi
-
-          echo "Checking web app exists..."
-          if ! az webapp show --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json >/dev/null 2>&1; then
-            echo "Web App '$AZ_WEBAPP_NAME' NOT FOUND in resource group '$AZ_RESOURCE_GROUP'."
-            az webapp list --resource-group "$AZ_RESOURCE_GROUP" -o table || true
-            exit 1
-          fi
-
-          echo "Debug checks passed."
-
-      - name: Deploy to Azure Web App (zip deploy via action)
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZ_WEBAPP_NAME }}
           slot-name: Production
-          # If using package or built artifact, you can pass package: path/to/zip
 
-      - name: Get publish profile & run collectstatic/migrate (guarded + retries)
+      - name: Get publish profile & run collectstatic + migrate
         env:
           AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
@@ -135,104 +81,40 @@ jobs:
           set -euo pipefail
           sudo apt-get update -y
           sudo apt-get install -y jq curl
-
           ARTIFACTS_DIR="$GITHUB_WORKSPACE/deploy-artifacts"
           mkdir -p "$ARTIFACTS_DIR"
-
-          echo "Fetching publishing profiles with az..."
-          PROFILES=$(az webapp deployment list-publishing-profiles \
-            --name "$AZ_WEBAPP_NAME" \
-            --resource-group "$AZ_RESOURCE_GROUP" \
-            -o json) || { echo "az webapp deployment list-publishing-profiles failed"; exit 1; }
-
+          PROFILES=$(az webapp deployment list-publishing-profiles --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json)
           echo "$PROFILES" > "$ARTIFACTS_DIR/publish_profiles.json"
           PROFILE_COUNT=$(echo "$PROFILES" | jq 'length')
-          echo "Publish profiles returned: $PROFILE_COUNT"
-
           if [ "$PROFILE_COUNT" -eq 0 ]; then
-            echo "ERROR: No publish profiles returned. Confirm web app exists and the service principal has permissions."
-            cat "$ARTIFACTS_DIR/publish_profiles.json"
-            exit 1
+            echo "No publish profiles found"; exit 1
           fi
-
-          # Use the first profile (usually the MSDeploy / FTP publish profile)
-          PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl // empty')
-          USER=$(echo "$PROFILES" | jq -r '.[0].userName // empty')
-          PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD // empty')
-
-          if [ -z "$PUBLISH_URL" ] || [ -z "$USER" ] || [ -z "$PASS" ]; then
-            echo "ERROR: publishUrl/userName/userPWD missing in publish profile. Dumping publish_profiles.json:"
-            cat "$ARTIFACTS_DIR/publish_profiles.json"
-            exit 1
-          fi
-
-          # Ensure URL has scheme
+          PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl')
+          USER=$(echo "$PROFILES" | jq -r '.[0].userName')
+          PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD')
           if [[ ! "$PUBLISH_URL" =~ ^https?:// ]]; then
             PUBLISH_URL="https://$PUBLISH_URL"
           fi
-
-          echo "Using PUBLISH_URL='$PUBLISH_URL'"
-
-          # Kudu SCM base URL (PUBLISH_URL may be like example.scm.azurewebsites.net)
           SCM_URL="$PUBLISH_URL"
-          # Some publish profiles return publishUrl without "/"; keep as-is
-
-          # Retry helper function
-          run_kudu_cmd() {
-            local cmd=$1
-            local attempt=1
-            local max=3
-            while [ $attempt -le $max ]; do
-              echo "Attempt $attempt: running Kudu command: $cmd"
-              resp=$(curl -s -u "$USER:$PASS" "$SCM_URL/api/command" \
-                -H "Content-Type: application/json" \
-                -d "{\"command\": $cmd, \"dir\": \"/home/site/wwwroot\"}" ) || true
-              echo "Response: $resp"
-              # Consider command successful if response contains "Output" or is non-empty - adjust as needed
-              if [ -n "$resp" ]; then
-                return 0
-              fi
-              attempt=$((attempt+1))
+          # run collectstatic and migrate with simple retries
+          for CMD in "python manage.py collectstatic --noinput" "python manage.py migrate --noinput"; do
+            OUT="$ARTIFACTS_DIR/$(echo "$CMD" | tr ' /' '_' | tr -cd '[:alnum:]_').json"
+            PAYLOAD=$(printf '{"command":"%s","dir":"/home/site/wwwroot"}' "$CMD")
+            ATTEMPT=1
+            SUCCESS=0
+            while [ $ATTEMPT -le 3 ]; do
+              echo "Running: $CMD (attempt $ATTEMPT)"
+              curl -s -u "$USER:$PASS" "$SCM_URL/api/command" -H "Content-Type: application/json" -d "$PAYLOAD" -o "$OUT" && SUCCESS=1 && break || true
+              ATTEMPT=$((ATTEMPT+1))
               sleep 2
             done
-            return 1
-          }
-
-          # Run collectstatic
-          echo "Running collectstatic via Kudu..."
-          if ! curl -s -u "$USER:$PASS" "$SCM_URL/api/command" \
-            -H "Content-Type: application/json" \
-            -d '{"command": "python manage.py collectstatic --noinput", "dir": "/home/site/wwwroot"}' \
-            -o "$ARTIFACTS_DIR/collectstatic.json"; then
-            echo "collectstatic curl failed - showing contents:"
-            cat "$ARTIFACTS_DIR/collectstatic.json" || true
-          fi
-
-          echo "Running migrate via Kudu..."
-          if ! curl -s -u "$USER:$PASS" "$SCM_URL/api/command" \
-            -H "Content-Type: application/json" \
-            -d '{"command": "python manage.py migrate --noinput", "dir": "/home/site/wwwroot"}' \
-            -o "$ARTIFACTS_DIR/migrate.json"; then
-            echo "migrate curl failed - showing contents:"
-            cat "$ARTIFACTS_DIR/migrate.json" || true
-          fi
-
-          echo "Fetching site listing for verification..."
-          curl -s -u "$USER:$PASS" "$SCM_URL/api/vfs/site/wwwroot/" -o "$ARTIFACTS_DIR/wwwroot.json" || true
-          curl -s -u "$USER:$PASS" "$SCM_URL/api/vfs/site/wwwroot/staticfiles" -o "$ARTIFACTS_DIR/staticfiles.json" || true
-
-      - name: Upload file list artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployed-file-lists
-          path: deploy-artifacts
+            echo "=== Output for $CMD ==="
+            cat "$OUT" || true
+          done
 
       - name: Restart Web App
         env:
           AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
         run: |
-          set -euo pipefail
-          az webapp restart \
-            --resource-group "$AZ_RESOURCE_GROUP" \
-            --name "$AZ_WEBAPP_NAME"
+          az webapp restart --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME"
