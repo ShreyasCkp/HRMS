@@ -8,12 +8,29 @@ export DJANGO_SETTINGS_MODULE
 
 echo "Starting container with DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}"
 
-# Activate virtualenv not required inside container as we installed globally in image
-# Wait for DB to become available by attempting migrations with retries
-MAX_TRIES=30
-SLEEP_SECONDS=2
-i=0
+# Wait for DB host to become available (if DB_HOST set), fallback to retry with migrate logic
+DB_HOST=${DB_HOST:-}
+DB_PORT=${DB_PORT:-5432}
+MAX_TRIES=${MAX_TRIES:-30}
+SLEEP_SECONDS=${SLEEP_SECONDS:-2}
 
+if [ -n "$DB_HOST" ]; then
+  echo "Waiting for database at ${DB_HOST}:${DB_PORT}..."
+  tries=0
+  while ! nc -z "$DB_HOST" "$DB_PORT"; do
+    tries=$((tries+1))
+    echo "Database not up yet (attempt ${tries}/${MAX_TRIES}) — sleeping ${SLEEP_SECONDS}s..."
+    if [ "$tries" -ge "$MAX_TRIES" ]; then
+      echo "Timed out waiting for database at ${DB_HOST}:${DB_PORT}"
+      exit 1
+    fi
+    sleep "$SLEEP_SECONDS"
+  done
+  echo "Database reachable."
+fi
+
+# Run migrations with retries (covers transient DB startup)
+i=0
 until python manage.py migrate --noinput 2>/tmp/migrate.err; do
   i=$((i+1))
   echo "migrate failed (attempt $i/$MAX_TRIES). Sleeping ${SLEEP_SECONDS}s and retrying..."
