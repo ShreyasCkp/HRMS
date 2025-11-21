@@ -17,8 +17,15 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+
+    env:
+      DJANGO_SETTINGS_MODULE: ${{ secrets.DJANGO_SETTINGS_MODULE }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
 
     steps:
       - name: Checkout repo
@@ -29,7 +36,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Create venv & (optionally) install deps on runner
+      - name: Create venv & install deps
         run: |
           python -m venv antenv
           source antenv/bin/activate
@@ -40,15 +47,14 @@ jobs:
             echo "No requirements.txt found — skipping pip install"
           fi
 
-      - name: (Optional) Collect static on runner so static files are baked into artifact
-        env:
-          DJANGO_SETTINGS_MODULE: ${{ secrets.DJANGO_SETTINGS_MODULE }}
+      - name: (Optional) Collect static on runner (requires DB envs above)
         run: |
           source antenv/bin/activate
           if [ -f manage.py ]; then
+            echo "Running collectstatic on runner (optional)..."
             python manage.py collectstatic --noinput || echo "collectstatic on runner failed; continuing"
           else
-            echo "manage.py not found in repo root; ensure manage.py is in repo root for this workflow"
+            echo "manage.py not found in repo root; skipping runner collectstatic"
           fi
 
       - name: Upload artifact for deployment
@@ -62,18 +68,15 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
 
     steps:
-      - name: Download build artifact
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: python-app
           path: .
 
-      - name: Login to Azure (using AZURE_CREDENTIALS)
+      - name: Login to Azure
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
@@ -83,65 +86,106 @@ jobs:
         with:
           app-name: ${{ env.AZ_WEBAPP_NAME }}
           slot-name: Production
-          # package: path/to/zip  # optional: you can pass a zip if you want determinism
 
-      - name: Get publish profile (for Kudu) and run migrate + collectstatic
+      - name: Run migrate, collectstatic and list files via Kudu
         env:
           AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
         run: |
           set -euo pipefail
+          ART="$GITHUB_WORKSPACE/deploy-artifacts"
+          mkdir -p "$ART"
           sudo apt-get update -y
           sudo apt-get install -y jq curl || true
-          ARTIFACTS_DIR="$GITHUB_WORKSPACE/deploy-artifacts"
-          mkdir -p "$ARTIFACTS_DIR"
 
-          echo "Fetching publish profile..."
+          echo "Fetching publishing profile..."
           PROFILES=$(az webapp deployment list-publishing-profiles --name "$AZ_WEBAPP_NAME" --resource-group "$AZ_RESOURCE_GROUP" -o json)
-          echo "$PROFILES" > "$ARTIFACTS_DIR/publish_profiles.json"
-          PROFILE_COUNT=$(echo "$PROFILES" | jq 'length' || echo 0)
-          if [ "$PROFILE_COUNT" -eq 0 ]; then
-            echo "No publish profiles returned; aborting"
-            cat "$ARTIFACTS_DIR/publish_profiles.json" || true
+          echo "$PROFILES" > "$ART/publish_profiles.json"
+          PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl // empty')
+          USER=$(echo "$PROFILES" | jq -r '.[0].userName // empty')
+          PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD // empty')
+
+          if [ -z "$PUBLISH_URL" ] || [ -z "$USER" ] || [ -z "$PASS" ]; then
+            echo "Publish profile missing; aborting Kudu operations."
+            cat "$ART/publish_profiles.json" || true
             exit 1
           fi
-
-          PUBLISH_URL=$(echo "$PROFILES" | jq -r '.[0].publishUrl')
-          USER=$(echo "$PROFILES" | jq -r '.[0].userName')
-          PASS=$(echo "$PROFILES" | jq -r '.[0].userPWD')
 
           if [[ ! "$PUBLISH_URL" =~ ^https?:// ]]; then
             PUBLISH_URL="https://$PUBLISH_URL"
           fi
-          SCM_URL="$PUBLISH_URL"
-          echo "Using Kudu at: $SCM_URL"
+          SCM="$PUBLISH_URL"
+          echo "Kudu endpoint: $SCM"
 
-          # Try migrate then collectstatic via Kudu; if manage.py is in a subfolder change DIR variable
-          DIR="/home/site/wwwroot"   # change if your manage.py is in a subfolder, e.g. "/home/site/wwwroot/backend"
+          # Candidate directories where manage.py might live
+          DIRS=("/home/site/wwwroot" "/home/site/wwwroot/backend" "/home/site/wwwroot/src")
 
-          echo "Running migrate via Kudu (dir=$DIR)..."
-          curl -s -u "$USER:$PASS" "$SCM_URL/api/command" \
-            -H "Content-Type: application/json" \
-            -d "{\"command\":\"python3 manage.py migrate --noinput\",\"dir\":\"${DIR}\"}" \
-            -o "$ARTIFACTS_DIR/migrate.json" || true
-          echo "MIGRATE RESULT:"
-          jq . "$ARTIFACTS_DIR/migrate.json" || cat "$ARTIFACTS_DIR/migrate.json" || true
+          run_kudu_cmd() {
+            CMD="$1"
+            DIR="$2"
+            SAFE=$(echo "$CMD" | tr ' /' '__' | tr -cd '[:alnum:]_')
+            OUT="$ART/${SAFE}_$(basename "$DIR").json"
+            ATTEMPT=1
+            SUCCESS=0
+            while [ $ATTEMPT -le 4 ]; do
+              echo "Attempt $ATTEMPT: $CMD (dir=$DIR)"
+              curl -s -u "$USER:$PASS" "$SCM/api/command" \
+                -H "Content-Type: application/json" \
+                -d "{\"command\":\"$CMD\",\"dir\":\"$DIR\"}" -o "$OUT" || true
+              # consider success if Kudu returned anything; we'll inspect output
+              if [ -s "$OUT" ]; then
+                SUCCESS=1
+                break
+              fi
+              ATTEMPT=$((ATTEMPT+1))
+              sleep 3
+            done
+            echo "Saved output to $OUT"
+            cat "$OUT" || true
+            return $SUCCESS
+          }
 
-          echo "Running collectstatic via Kudu (dir=$DIR)..."
-          curl -s -u "$USER:$PASS" "$SCM_URL/api/command" \
-            -H "Content-Type: application/json" \
-            -d "{\"command\":\"python3 manage.py collectstatic --noinput\",\"dir\":\"${DIR}\"}" \
-            -o "$ARTIFACTS_DIR/collectstatic.json" || true
-          echo "COLLECTSTATIC RESULT:"
-          jq . "$ARTIFACTS_DIR/collectstatic.json" || cat "$ARTIFACTS_DIR/collectstatic.json" || true
+          MIGRATE_CMD="python3 manage.py migrate --noinput"
+          COLLECT_CMD="python3 manage.py collectstatic --noinput"
 
-          # List deployed files for verification
-          echo "Listing /home/site/wwwroot/"
-          curl -s -u "$USER:$PASS" "$SCM_URL/api/vfs/site/wwwroot/" -o "$ARTIFACTS_DIR/wwwroot.json" || true
-          echo "Listing staticfiles (if present)"
-          curl -s -u "$USER:$PASS" "$SCM_URL/api/vfs/site/wwwroot/staticfiles" -o "$ARTIFACTS_DIR/staticfiles.json" || true
+          MIGRATE_DONE=0
+          COLLECT_DONE=0
 
-      - name: Upload deployed file lists and Kudu outputs
+          for D in "${DIRS[@]}"; do
+            if [ $MIGRATE_DONE -eq 0 ]; then
+              if run_kudu_cmd "$MIGRATE_CMD" "$D"; then
+                MIGRATE_DONE=1
+                echo "migrate succeeded in $D"
+              else
+                echo "migrate failed in $D"
+              fi
+            fi
+            if [ $COLLECT_DONE -eq 0 ]; then
+              if run_kudu_cmd "$COLLECT_CMD" "$D"; then
+                COLLECT_DONE=1
+                echo "collectstatic succeeded in $D"
+              else
+                echo "collectstatic failed in $D"
+              fi
+            fi
+            if [ $MIGRATE_DONE -eq 1 ] && [ $COLLECT_DONE -eq 1 ]; then
+              break
+            fi
+          done
+
+          if [ $MIGRATE_DONE -eq 0 ]; then
+            echo "Warning: migrate did not succeed in any candidate directory."
+          fi
+          if [ $COLLECT_DONE -eq 0 ]; then
+            echo "Warning: collectstatic did not succeed in any candidate directory."
+          fi
+
+          # list files in wwwroot and staticfiles for verification
+          curl -s -u "$USER:$PASS" "$SCM/api/vfs/site/wwwroot/" -o "$ART/wwwroot.json" || true
+          curl -s -u "$USER:$PASS" "$SCM/api/vfs/site/wwwroot/staticfiles" -o "$ART/staticfiles.json" || true
+          echo "Saved file lists to $ART"
+
+      - name: Upload deployed-file-lists artifacts
         uses: actions/upload-artifact@v4
         with:
           name: deployed-file-lists
@@ -154,4 +198,4 @@ jobs:
         run: |
           az webapp restart --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME"
 
-# Reference debug screenshot (uploaded): /mnt/data/2488467a-de11-4f33-8a13-7a68b4c6513f.png
+# Reference screenshot (uploaded): /mnt/data/2488467a-de11-4f33-8a13-7a68b4c6513f.png
