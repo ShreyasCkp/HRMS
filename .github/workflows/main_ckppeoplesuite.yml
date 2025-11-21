@@ -23,9 +23,10 @@ jobs:
         uses: actions/checkout@v4
 
       # Install system deps for native Python packages (pycairo, weasyprint, xmllint, jq, etc.)
-      - name: Install system dependencies for native builds
+      - name: Install system dependencies for native builds (Pango/Cairo/etc.)
         run: |
-          sudo apt-get update
+          sudo apt-get update -y
+          # Try install common pango package names; if one is missing it won't fail the whole step
           sudo apt-get install -y --no-install-recommends \
             build-essential \
             pkg-config \
@@ -33,15 +34,30 @@ jobs:
             libcairo2-dev \
             libgirepository1.0-dev \
             libglib2.0-dev \
-            libpango1.0-0 \
             libgdk-pixbuf2.0-0 \
             libpng-dev \
             libjpeg-dev \
             libffi-dev \
             libxml2-utils \
+            libxslt1.1 \
+            libpq-dev \
+            libssl-dev \
             jq \
             git \
-            curl
+            curl || true
+
+          # Install pango. On different images package name may differ; try both variants.
+          if ! dpkg -s libpango-1.0-0 >/dev/null 2>&1; then
+            echo "libpango-1.0-0 not found by dpkg; attempt apt-get install libpango1.0-0 (alternate name)"
+            sudo apt-get install -y --no-install-recommends libpango1.0-0 || true
+          else
+            sudo apt-get install -y --no-install-recommends libpango-1.0-0 || true
+          fi
+
+          # Show installed pango / cairo info for debugging
+          echo "=== Pango / Cairo installed packages ==="
+          dpkg -l | grep -E "pango|cairo|gdk-pixbuf" || true
+
 
       - name: Set up Python version
         uses: actions/setup-python@v5
@@ -207,3 +223,4 @@ jobs:
           AZ_WEBAPP_NAME: ${{ env.AZ_WEBAPP_NAME }}
         run: |
           az webapp restart --subscription "$AZ_SUBSCRIPTION" --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_WEBAPP_NAME"
+
