@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}Reports & Analytics | SmartHR ERP{% endblock %}
+{% block page_title %}<h2 class="fw-bold">Reports & Analytics</h2>{% endblock %}
+{% block top_actions %}
+  <a href="/reports/export/" class="btn btn-gradient quick-action-btn"><i class="bi bi-file-earmark-arrow-down"></i> Export Report</a>
+{% endblock %}
+{% block content %}
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="card kpi-card text-center p-3">
+      <div class="fs-2 text-primary"><i class="bi bi-people"></i></div>
+      <div class="fw-bold fs-4">{{ total_employees }}</div>
+      <div class="text-muted">Total Employees</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card kpi-card text-center p-3">
+      <div class="fs-2 text-success"><i class="bi bi-calendar-check"></i></div>
+      <div class="fw-bold fs-4">{{ total_leaves }}</div>
+      <div class="text-muted">Total Leaves</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card kpi-card text-center p-3">
+      <div class="fs-2 text-warning"><i class="bi bi-cash-coin"></i></div>
+      <div class="fw-bold fs-4">{{ total_payroll }}</div>
+      <div class="text-muted">Total Payroll</div>
+    </div>
+  </div>
+</div>
+<div class="card p-3 mb-4">
+  <div class="fw-bold mb-2">Analytics Overview</div>
+  <ul class="list-group list-group-flush">
+    <li class="list-group-item">Employee Growth: {{ employee_growth }}</li>
+    <li class="list-group-item">Leave Trends: {{ leave_trends }}</li>
+    <li class="list-group-item">Payroll Trends: {{ payroll_trends }}</li>
+    <li class="list-group-item">Performance Trends: {{ performance_trends }}</li>
+  </ul>
+</div>
+<div class="card p-3">
+  <div class="fw-bold mb-2">Recent Reports</div>
+  <ul class="list-group list-group-flush">
+    {% for report in recent_reports %}
+    <li class="list-group-item">{{ report.title }} - {{ report.date }}</li>
+    {% empty %}
+    <li class="list-group-item text-muted">No reports found.</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

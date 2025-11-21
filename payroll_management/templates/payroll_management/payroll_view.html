@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Payroll Details{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Payroll Details</h2>
+  <table class="table table-bordered">
+    <tr><th>Employee</th><td>{{ payroll.employee }}</td></tr>
+    <tr><th>Month</th><td>{{ payroll.month }}</td></tr>
+    <tr><th>Basic Salary</th><td>{{ payroll.basic_salary }}</td></tr>
+    <tr><th>Tax</th><td>{{ payroll.tax }}</td></tr>
+    <tr><th>Deductions</th><td>{{ payroll.deductions }}</td></tr>
+    <tr><th>Net Salary</th><td>{{ payroll.net_salary }}</td></tr>
+    <tr><th>Status</th><td>{{ payroll.status }}</td></tr>
+    <tr>
+      <th>Payslip</th>
+      <td>
+        {% if payroll.payslip_pdf %}
+          <a href="{{ payroll.payslip_pdf.url }}" target="_blank">Download</a>
+        {% else %}
+          -
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+  <a href="{% url 'payroll_list' %}" class="btn btn-secondary">Back to List</a>
+</div>
+{% endblock %}

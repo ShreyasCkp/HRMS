@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block title %}Attendance | SmartHR ERP{% endblock %}
+
+{% block page_title %}
+<h2 class="fw-bold">Attendance Records</h2>
+{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;
+    --accent-btn-hover: #2f8886;
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+  }
+
+  body {
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+    font-family: 'Inter', sans-serif;
+  }
+
+  .attendance-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Table styling */
+  table.table th {
+    background-color: #f1f3f5;
+    font-weight: 600;
+  }
+
+  .btn-accent {
+    background-color: var(--accent-btn) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover) !important;
+  }
+
+  .table-responsive {
+    overflow-x: auto;
+  }
+</style>
+
+<div class="container mt-4">
+  <div class="attendance-card">
+
+    <!-- Add Attendance Button -->
+    <div class="mb-3 text-start">
+      <a href="{% url 'attendance_create' %}" class="btn btn-accent">
+        <i class="bi bi-plus-circle"></i> Add Attendance
+      </a>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Employee</th>
+            <th>Date</th>
+            <th>Clock In</th>
+            <th>Clock Out</th>
+            <th>Early Exit</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rec in records %}
+          <tr>
+            <td>{{ rec.employee }}</td>
+            <td>{{ rec.date }}</td>
+            <td>{{ rec.clock_in }}</td>
+            <td>{{ rec.clock_out }}</td>
+            <td>{{ rec.early_exit }}</td>
+            <td class="action-cell">
+              <a href="{% url 'attendance_edit' rec.id %}" class="btn btn-accent btn-sm">
+                Edit
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center">No attendance records found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+{% block title %}Add/Edit Performance Review{% endblock %}
+
+{% block content %}
+<style>
+    /* Container */
+    .review-form-container {
+        max-width: 750px;
+        margin: 2rem auto;
+        background-color: var(--card-bg);
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .review-form-container h2 {
+        font-size: 1.6rem;
+        font-weight: 600;
+        text-align: center;
+        color: var(--text-dark);
+        margin-bottom: 1.5rem;
+    }
+
+    /* Section Card */
+    .review-section {
+        background: #fafafa;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 1.2rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .review-section h5 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-dark);
+        margin-bottom: 1rem;
+    }
+
+    /* Inputs */
+    label {
+        font-weight: 500;
+        margin-bottom: 0.3rem;
+        display: block;
+        color: var(--text-dark);
+    }
+
+    input[type="text"],
+    select,
+    textarea {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        font-size: 0.95rem;
+    }
+
+    textarea {
+        min-height: 90px;
+    }
+
+    /* KPI formset */
+    .formset-form {
+        padding: 12px;
+        border: 1px dashed #ddd;
+        border-radius: 8px;
+        background: #fff;
+        margin-bottom: 1rem;
+    }
+
+    /* Buttons */
+    .btn-submit {
+        background: var(--accent-btn);
+        color: #fff;
+        border: none;
+        padding: 10px 20px;
+        font-weight: 500;
+        font-size: 0.95rem;
+        border-radius: 6px;
+        transition: background 0.3s ease;
+        width: 100%;
+        margin-top: 1rem;
+    }
+
+    .btn-submit:hover {
+        background: var(--accent-btn-hover);
+    }
+
+    .btn-add {
+        background: #f0f0f0;
+        border: 1px solid #ccc;
+        padding: 8px;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        width: 100%;
+        margin-top: .5rem;
+    }
+
+    .text-danger {
+        color: #dc3545;
+        font-size: 0.85rem;
+        margin-top: 0.2rem;
+    }
+</style>
+
+<div class="review-form-container">
+    <h2>
+        {% if readonly %}
+            View Performance Review
+        {% elif review_form.instance.pk %}
+            Edit Performance Review
+        {% else %}
+            Add Performance Review
+        {% endif %}
+    </h2>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <!-- Review Details -->
+        <div class="review-section">
+            <h5>Review Details</h5>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    {{ review_form.employee.label_tag }} {{ review_form.employee }}
+                </div>
+                <div class="col-md-6">
+                    {{ review_form.review_period.label_tag }} {{ review_form.review_period }}
+                </div>
+                <div class="col-md-8">
+                    {{ review_form.feedback.label_tag }} {{ review_form.feedback }}
+                </div>
+                <div class="col-md-4">
+                    {{ review_form.reviewed_by.label_tag }} {{ review_form.reviewed_by }}
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI Scores -->
+        <div class="review-section">
+            <h5>KPI Scores</h5>
+            {{ formset.management_form }}
+            <div id="formset-container">
+                {% for form in formset %}
+                    <div class="row g-3 formset-form">
+                        {{ form.id }} <!-- hidden id -->
+                        <div class="col-md-6">
+                            {{ form.kpi.label_tag }} {{ form.kpi }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.score.label_tag }} {{ form.score }}
+                        </div>
+                        {% if formset.can_delete %}
+                        <div class="col-md-2 d-flex align-items-center">
+                            {{ form.DELETE }} <label class="ms-2">Delete</label>
+                        </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            {% if not readonly %}
+                <button type="button" id="add-form" class="btn-add">+ Add KPI</button>
+            {% endif %}
+        </div>
+
+        {% if not readonly %}
+            <button type="submit" class="btn-submit">Save Review</button>
+        {% endif %}
+    </form>
+</div>
+
+{% if not readonly %}
+<script>
+    const formsetContainer = document.getElementById("formset-container");
+    const addFormButton = document.getElementById("add-form");
+    const totalForms = document.getElementById("id_scores-TOTAL_FORMS");
+
+    addFormButton.addEventListener("click", function () {
+        const formCount = parseInt(totalForms.value);
+        const newForm = formsetContainer.children[0].cloneNode(true);
+
+        // Clear only visible fields (not hidden id or DELETE)
+        newForm.querySelectorAll("input, select, textarea").forEach(input => {
+            if (input.type !== "hidden" && input.name.indexOf("DELETE") === -1) {
+                input.value = "";
+            }
+            if (input.type === "checkbox") {
+                input.checked = false;
+            }
+        });
+
+        // Update form index
+        newForm.innerHTML = newForm.innerHTML.replace(/scores-(\d+)-/g, `scores-${formCount}-`);
+
+        formsetContainer.appendChild(newForm);
+        totalForms.value = formCount + 1;
+    });
+</script>
+{% endif %}
+{% endblock %}

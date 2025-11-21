@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+{% block title %}Add Attendance{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;       
+    --accent-btn-hover: #2f8886; 
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+    --border-light: #d1d5db;
+  }
+
+  body {
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+    font-family: 'Inter', sans-serif;
+  }
+
+  .form-card {
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    background: var(--card-bg);
+    padding: 2rem;
+  }
+
+  label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: block;
+    color: var(--text-dark);
+  }
+
+  input, select {
+    width: 100% !important;
+    height: 45px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    font-size: 14px;
+    background-color: #fff;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  input:focus, select:focus {
+    border-color: var(--accent-btn);
+    box-shadow: 0 0 0 3px rgba(60, 174, 163, 0.2);
+    outline: none;
+  }
+
+  .form-group {
+    margin-bottom: 18px;
+  }
+
+  .btn-accent {
+    background-color: var(--accent-btn) !important;
+    color: #fff !important;
+    font-weight: 600;
+    min-width: 160px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover) !important;
+  }
+
+  .btn-secondary, .btn-warning, .btn-success, .btn-primary {
+    min-width: 160px;
+    border-radius: 8px;
+  }
+
+  .form-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: var(--text-dark);
+  }
+
+  /* Two-column layout for wider screens */
+  .row.g-3 > .col-md-6 {
+    margin-bottom: 15px;
+  }
+</style>
+
+<div class="container mt-5" style="max-width: 700px;">
+  <h2 class="form-title">Add Attendance</h2>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" class="form-card" id="attendanceForm" novalidate>
+    {% csrf_token %}
+    <div class="row g-3">
+      <div class="col-md-6 form-group">
+        {{ form.employee.label_tag }}
+        {{ form.employee }}
+        {% if form.employee.errors %}
+          <div class="text-danger small">{{ form.employee.errors }}</div>
+        {% endif %}
+      </div>
+
+      <div class="col-md-6 form-group">
+        {{ form.date.label_tag }}
+        {{ form.date }}
+        {% if form.date.errors %}
+          <div class="text-danger small">{{ form.date.errors }}</div>
+        {% endif %}
+      </div>
+
+      <div class="col-md-6 form-group">
+        {{ form.clock_in.label_tag }}
+        {{ form.clock_in }}
+        {% if form.clock_in.errors %}
+          <div class="text-danger small">{{ form.clock_in.errors }}</div>
+        {% endif %}
+      </div>
+
+      <div class="col-md-6 form-group">
+        {{ form.clock_out.label_tag }}
+        {{ form.clock_out }}
+        {% if form.clock_out.errors %}
+          <div class="text-danger small">{{ form.clock_out.errors }}</div>
+        {% endif %}
+      </div>
+
+      <div class="col-md-6 form-group">
+        {{ form.early_exit.label_tag }}
+        {{ form.early_exit }}
+        {% if form.early_exit.errors %}
+          <div class="text-danger small">{{ form.early_exit.errors }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="mt-4 d-flex flex-wrap gap-2 justify-content-center">
+      <button type="submit" class="btn btn-success">Save</button>
+      <a href="{% url 'attendance_list' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // Set the date field to today's date and make it read-only
+  const dateField = document.getElementById('id_date');
+  if (dateField && !dateField.value) {
+    const today = new Date();
+    dateField.value = today.toISOString().split('T')[0];  // Set date in YYYY-MM-DD format
+  }
+  if (dateField) dateField.readOnly = true;
+
+  // Get the employee select, clock-in, and clock-out fields
+  const employeeSelect = document.getElementById('id_employee');
+  const clockInField = document.getElementById('id_clock_in');
+  const clockOutField = document.getElementById('id_clock_out');
+
+  // Function to set a field value and dispatch change/input events
+  function setFieldValue(field, value) {
+    field.value = value;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    field.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // Function to get the current time in HH:MM format (without seconds)
+  function currentTime() {
+    const now = new Date();
+    return now.toTimeString().slice(0, 5);  // Get only the HH:MM part
+  }
+
+  // When an employee is selected, update the clock-in and clock-out fields
+  employeeSelect.addEventListener('change', function () {
+    const empId = this.value;
+
+    // If no employee is selected, clear the clock-in and clock-out fields
+    if (!empId) {
+      setFieldValue(clockInField, '');
+      setFieldValue(clockOutField, '');
+      return;
+    }
+
+    // Fetch today's attendance for the selected employee
+    fetch("{% url 'get_today_attendance' %}?employee_id=" + empId)
+      .then(res => res.json())
+      .then(data => {
+        const timeNow = currentTime();
+
+        // If there's no clock_in value, set the clock_in to the current time
+        if (!data.clock_in) {
+          setFieldValue(clockInField, timeNow);
+          setFieldValue(clockOutField, '');  // Leave clock_out blank
+        }
+        // If there's a clock_in but no clock_out, set clock_out to the current time
+        else if (!data.clock_out) {
+          setFieldValue(clockInField, data.clock_in);
+          setFieldValue(clockOutField, timeNow);  // Set clock_out to current time
+        }
+        // If both clock_in and clock_out exist, populate both fields
+        else {
+          setFieldValue(clockInField, data.clock_in);
+          setFieldValue(clockOutField, data.clock_out);
+        }
+      })
+      .catch(err => console.error('Error loading attendance:', err));
+  });
+
+  // Trigger the change event for the currently selected employee (if any)
+  if (employeeSelect.value) {
+    employeeSelect.dispatchEvent(new Event('change'));
+  }
+
+  // Ensure the form submission includes the clock_in and clock_out values (HH:MM format)
+  const form = document.querySelector('form');
+  form.addEventListener('submit', function (event) {
+    const clockInValue = clockInField.value;
+    const clockOutValue = clockOutField.value;
+
+    // If the clock_in field has a value, ensure it's submitted in HH:MM format
+    if (clockInValue) {
+      const clockInInput = document.createElement('input');
+      clockInInput.setAttribute('type', 'hidden');
+      clockInInput.setAttribute('name', 'clock_in');
+      clockInInput.setAttribute('value', clockInValue);  // Make sure only HH:MM
+      form.appendChild(clockInInput);
+    }
+
+    // If the clock_out field has a value, ensure it's submitted in HH:MM format
+    if (clockOutValue) {
+      const clockOutInput = document.createElement('input');
+      clockOutInput.setAttribute('type', 'hidden');
+      clockOutInput.setAttribute('name', 'clock_out');
+      clockOutInput.setAttribute('value', clockOutValue);  // Make sure only HH:MM
+      form.appendChild(clockOutInput);
+    }
+  });
+});
+</script>
+
+{% endblock %}

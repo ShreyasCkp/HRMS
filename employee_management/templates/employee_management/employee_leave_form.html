@@ -1,0 +1,375 @@
+{% extends "employee_management/employee_dashboard1.html" %}
+{% load static %}
+
+{% block title %}Leave Application{% endblock %}
+
+{% block content %}
+<style>
+    /* Styles (unchanged) */
+    :root {
+        --sidebar-bg: #2f3e46;
+        --sidebar-color: #ffffff;
+        --sidebar-hover: #124e51;
+        --active-bg: #52796f;
+        --accent-btn: #3caea3;
+        --accent-btn-hover: #2f8886;
+        --topbar-bg: #ffffff;
+        --topbar-border: #e0e0e0;
+        --body-bg: #f8f9fa;
+        --card-bg: #ffffff;
+        --text-dark: #333333;
+        --error-color: #dc3545;
+    }
+
+    body {
+        background-color: var(--body-bg);
+        font-family: 'Inter', sans-serif;
+        color: var(--text-dark);
+    }
+
+    .form-card {
+        background: var(--card-bg);
+        padding: 30px 40px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        max-width: 900px;
+        margin: 40px auto;
+    }
+
+    .form-title {
+        text-align: center;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--active-bg);
+        margin-bottom: 1.5rem;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem 1.5rem;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .form-group label {
+        font-weight: 500;
+        margin-bottom: 0.4rem;
+        color: var(--text-dark);
+        font-size: 0.875rem;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        color: var(--text-dark);
+    }
+
+    .form-group input[readonly] {
+        background-color: #e9ecef;
+        color: #495057;
+    }
+
+    .form-actions {
+        margin-top: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .btn-primary {
+        font-size: 0.9rem;
+        font-weight: 600;
+        padding: 0.5rem 1.25rem;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        background-color: var(--active-bg);
+        color: #fff;
+        transition: background-color 0.3s;
+    }
+
+    .btn-primary:hover {
+        background-color: var(--accent-btn-hover);
+    }
+
+    .btn-back-link {
+        font-size: 0.9rem;
+        font-weight: 600;
+        padding: 0.5rem 1.25rem;
+        border-radius: 6px;
+        text-decoration: none;
+        border: 1px solid var(--active-bg);
+        color: var(--active-bg);
+        background: transparent;
+        transition: background-color 0.3s, color 0.3s;
+    }
+
+    .btn-back-link:hover {
+        background-color: var(--active-bg);
+        color: #fff;
+    }
+
+    .error-message {
+        color: var(--error-color);
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
+    }
+
+    /* Popup styles (unchanged) */
+    .custom-popup {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+    }
+
+    .popup-content {
+        background: var(--card-bg);
+        padding: 1.5rem 2rem;
+        border-radius: 10px;
+        text-align: center;
+        width: 90%;
+        max-width: 350px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+
+    .popup-content h3 {
+        color: var(--active-bg);
+        margin-bottom: 1rem;
+        font-size: 1.25rem;
+    }
+
+    .popup-content p {
+        font-size: 0.9rem;
+        margin-bottom: 1.25rem;
+        color: var(--text-dark);
+        white-space: pre-line;
+    }
+
+    .popup-close {
+        background: var(--active-bg);
+        color: #fff;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
+    .popup-close:hover {
+        background: var(--accent-btn-hover);
+    }
+
+    @media (max-width: 576px) {
+        .form-card {
+            padding: 20px;
+            margin: 20px auto;
+        }
+        .form-actions {
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .btn-primary, .btn-back-link {
+            width: 100%;
+            text-align: center;
+        }
+    }
+</style>
+
+<div class="form-card">
+    <h2 class="form-title">Leave Form</h2>
+    <form method="post" id="leaveForm">
+        {% csrf_token %}
+        <div class="form-grid">
+            <!-- Leave Type -->
+            <div class="form-group">
+                <label for="id_leave_type">Leave Type</label>
+                {{ form.leave_type }}
+                {% if form.leave_type.errors %}
+                    <div class="error-message">{{ form.leave_type.errors }}</div>
+                {% endif %}
+            </div>
+
+            <!-- Start Date -->
+            <div class="form-group">
+                <label for="id_start_date">Start Date</label>
+                {{ form.start_date }}
+                {% if form.start_date.errors %}
+                    <div class="error-message">{{ form.start_date.errors }}</div>
+                {% endif %}
+            </div>
+
+            <!-- End Date -->
+            <div class="form-group">
+                <label for="id_end_date">End Date</label>
+                {{ form.end_date }}
+                {% if form.end_date.errors %}
+                    <div class="error-message">{{ form.end_date.errors }}</div>
+                {% endif %}
+            </div>
+
+            <!-- Number of Leave Days -->
+            <div class="form-group">
+                <label for="id_leave_days">Number of Leave Days</label>
+                {{ form.leave_days }}
+            </div>
+
+            <!-- Next Working Day -->
+            <div class="form-group">
+                <label for="id_next_working_day">Next Working Day</label>
+                {{ form.next_working_day }}
+            </div>
+
+            <!-- Reason (span two columns) -->
+            <div class="form-group" style="grid-column: span 2;">
+                <label for="id_reason">Reason</label>
+                {{ form.reason }}
+                {% if form.reason.errors %}
+                    <div class="error-message">{{ form.reason.errors }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <a href="{% url 'employee_calendar' %}" class="btn-back-link">Back</a>
+            <button type="submit" class="btn-primary">Save</button>
+        </div>
+    </form>
+
+    {% if edit_leave %}
+    <form method="POST" action="{% url 'edit_leave_cancel' edit_leave.id %}" style="margin-top: 1rem; text-align: center;">
+        {% csrf_token %}
+        <button type="submit" class="btn-back-link">Cancel Leave</button>
+    </form>
+    {% endif %}
+</div>
+<!-- Snackbar for notifications -->
+<div id="snackbar"></div>
+
+<!-- Custom Popup -->
+<div class="custom-popup" id="leavePopup">
+    <div class="popup-content">
+        <h3>⚠ Leave Conflict</h3>
+        <p id="popupMessage"></p>
+        <button class="popup-close" onclick="closePopup()">Close</button>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        let today = new Date().toISOString().split('T')[0];
+        const startInput = document.getElementById("id_start_date");
+        const endInput = document.getElementById("id_end_date");
+        if (startInput) startInput.setAttribute("min", today);
+        if (endInput) endInput.setAttribute("min", today);
+    });
+
+    function calculateLeave() {
+        const startInput = document.getElementById('id_start_date');
+        const endInput = document.getElementById('id_end_date');
+        const leaveDaysInput = document.getElementById('id_leave_days');
+        const nextDayInput = document.getElementById('id_next_working_day');
+
+        if (!startInput || !endInput || !leaveDaysInput || !nextDayInput) return;
+
+        const startDate = new Date(startInput.value);
+        const endDate = new Date(endInput.value);
+
+        if (startDate && endDate && endDate >= startDate) {
+            const diffTime = endDate - startDate;
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            leaveDaysInput.value = diffDays;
+
+            let nextDay = new Date(endDate);
+            nextDay.setDate(nextDay.getDate() + 1);
+            // skip weekends (Saturday=6, Sunday=0)
+            while (nextDay.getDay() === 0 || nextDay.getDay() === 6) {
+                nextDay.setDate(nextDay.getDate() + 1);
+            }
+            nextDayInput.value = nextDay.toISOString().split('T')[0];
+        } else {
+            leaveDaysInput.value = '';
+            nextDayInput.value = '';
+        }
+    }
+
+    const startWatch = document.getElementById('id_start_date');
+    const endWatch = document.getElementById('id_end_date');
+    if (startWatch) startWatch.addEventListener('change', calculateLeave);
+    if (endWatch) endWatch.addEventListener('change', calculateLeave);
+
+    // 🔹 Show snackbar for notifications
+    function showSnackbar(message) {
+        const snackbar = document.createElement('div');
+        snackbar.textContent = message;
+        snackbar.style.position = 'fixed';
+        snackbar.style.bottom = '30px';
+        snackbar.style.left = '50%';
+        snackbar.style.transform = 'translateX(-50%)';
+        snackbar.style.background = 'green';
+        snackbar.style.color = 'white';
+        snackbar.style.padding = '10px 20px';
+        snackbar.style.borderRadius = '5px';
+        snackbar.style.fontSize = '16px';
+        snackbar.style.zIndex = '9999';
+        document.body.appendChild(snackbar);
+
+        // Hide snackbar after 5 seconds
+        setTimeout(() => {
+            snackbar.remove();
+        }, 5000);
+    }
+
+    function handleLeaveAction(event) {
+    event.preventDefault(); // Prevent default form submission behavior
+
+    const leaveForm = document.getElementById('leaveForm');
+    const formData = new FormData(leaveForm);
+
+    fetch(leaveForm.action, {
+        method: 'POST',
+        body: formData,
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showSnackbar(data.message); // Show success message in snackbar
+            if (data.redirect_url) {
+                // Redirect to the employee calendar page after success
+                window.location.href = data.redirect_url;
+            }
+        } else {
+            showSnackbar(data.message); // Show error message in snackbar
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showSnackbar('Something went wrong!');
+    });
+}
+
+
+    // Attach the handleLeaveAction function to the form submit
+    const leaveForm = document.getElementById('leaveForm');
+    leaveForm.addEventListener('submit', handleLeaveAction);
+</script>
+
+
+
+
+{% endblock %}

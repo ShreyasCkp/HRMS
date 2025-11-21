@@ -1,0 +1,233 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Dashboard | SmartHR ERP{% endblock %}
+{% block page_title %}<h2 class="fw-bold"></h2>{% endblock %}
+
+{% block top_actions %}
+<!-- Quick actions can go here if needed -->
+{% endblock %}
+
+{% block content %}
+
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;
+    --accent-btn-hover: #2f8886;
+    --topbar-bg: #ffffff;
+    --topbar-border: #e0e0e0;
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+  }
+
+  /* KPI Cards */
+  .kpi-card {
+    background-color: var(--card-bg);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s;
+    padding: 1.5rem;
+    text-align: center;
+  }
+  .kpi-card:hover { transform: translateY(-3px); }
+
+  /* Quick Action Buttons */
+  .quick-action-btn {
+    background-color: var(--accent-btn);
+    color: #fff;
+    margin: 6px 8px 6px 0;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+  }
+  .quick-action-btn:hover { background-color: var(--accent-btn-hover); }
+
+  /* Card Header Style (for Quick Actions & Recent Activities) */
+  .card-header-custom {
+    font-weight: 600;
+    font-size: 1.1rem;
+    border-bottom: 2px solid var(--accent-btn);
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+    color: var(--text-dark);
+  }
+
+  /* Recent Activities List Scroll */
+  .recent-activities-list {
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 5px;
+  }
+
+  .recent-activities-list li {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .recent-activities-list li:last-child {
+    border-bottom: none;
+  }
+
+  /* ✅ Sara Chatbot Floating Widget */
+  #sara-chatbot-widget {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 300px;
+    background-color: #ffffff;
+    border: 1px solid #ccc;
+    border-radius: 12px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+    font-size: 14px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+  }
+  #sara-chatbot-header {
+    background-color: var(--accent-btn);
+    color: #fff;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+  }
+  #sara-chatbot-body {
+    display: none;
+    flex-direction: column;
+    padding: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  #sara-chatbot-messages {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 10px;
+  }
+  #sara-chatbot-form {
+    display: flex;
+  }
+  #sara-chatbot-input {
+    flex: 1;
+    border-radius: 6px 0 0 6px;
+    border: 1px solid #ccc;
+    padding: 6px 10px;
+  }
+  #sara-chatbot-form button {
+    background: var(--accent-btn);
+    color: white;
+    border: none;
+    padding: 0 16px;
+    border-radius: 0 6px 6px 0;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  #sara-chatbot-form button:hover {
+    background: var(--accent-btn-hover);
+  }
+</style>
+
+<!-- 🔔 Notifications -->
+<!-- <div class="dropdown float-end mb-3">
+  <button class="btn btn-light position-relative" data-bs-toggle="dropdown">
+    <i class="bi bi-bell-fill"></i>
+    {% if notifications %}
+      <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+        {{ notifications|length }}
+      </span>
+    {% endif %}
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end" style="width: 300px; max-height: 300px; overflow-y: auto;">
+    {% for notification in notifications %}
+      <li class="dropdown-item small">
+        {{ notification.message }}<br>
+        <small class="text-muted">{{ notification.created_at|date:"M d, Y H:i" }}</small>
+      </li>
+    {% empty %}
+      <li class="dropdown-item text-muted">No new notifications</li>
+    {% endfor %}
+  </ul>
+</div> -->
+
+<!-- KPI Section -->
+<div class="row g-4 mb-4">
+  <div class="col-md-3">
+    <div class="card kpi-card">
+      <div class="fs-2 text-primary"><i class="bi bi-people"></i></div>
+      <div class="fw-bold fs-4">{{ total_employees }}</div>
+      <div class="text-muted">Total Employees</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card kpi-card">
+      <div class="fs-2 text-success"><i class="bi bi-calendar-check"></i></div>
+      <div class="fw-bold fs-4">{{ active_leaves }}</div>
+      <div class="text-muted">Active Leaves</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card kpi-card">
+      <div class="fs-2 text-warning"><i class="bi bi-clock-history"></i></div>
+      <div class="fw-bold fs-4">{{ present_today }}</div>
+      <div class="text-muted">Present Today</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card kpi-card">
+      <div class="fs-2 text-danger"><i class="bi bi-cash-coin"></i></div>
+      <div class="fw-bold fs-4">₹{{ monthly_payroll }}</div>
+      <div class="text-muted">Monthly Payroll</div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Actions & Recent Activities -->
+<div class="row mb-4">
+  <!-- Quick Actions -->
+  <div class="col-md-6">
+    <div class="card p-3 mb-4">
+      <div class="card-header-custom">Quick Actions</div>
+      <div>
+        <a href="{% url 'employee_create' %}" class="btn quick-action-btn"><i class="bi bi-person-plus"></i> Add Employee</a>
+        <a href="{% url 'review_list' %}" class="btn quick-action-btn"><i class="bi bi-calendar-plus"></i> Add Performance</a>
+        <a href="{% url 'attendance_create' %}" class="btn quick-action-btn"><i class="bi bi-clock"></i> Clock In/Out</a>
+        <a href="{% url 'my_requisitions' %}" class="btn quick-action-btn"><i class="bi bi-bar-chart"></i> Post Job</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activities -->
+  <div class="col-md-6">
+    <div class="card p-3 mb-4">
+      <div class="card-header-custom">Recent Activities</div>
+      <ul class="recent-activities-list list-unstyled mb-0">
+        {% for activity in recent_activities %}
+          <li>
+            <strong>{{ activity.display_name }}</strong>
+            {{ activity.action }}
+            <span class="text-primary">{{ activity.model_name }}</span>
+            ({{ activity.object_repr }})<br>
+            <small class="text-muted">{{ activity.timestamp|date:"M d, Y H:i" }}</small>
+          </li>
+        {% empty %}
+          <li class="text-muted">No recent activities.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+{% endblock %}

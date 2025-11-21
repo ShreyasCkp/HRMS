@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+
+{% block title %}Recruitment | SmartHR ERP{% endblock %}
+
+{% block page_title %}
+<h2 class="fw-bold">Reference List</h2>
+{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;
+    --accent-btn-hover: #2f8886;
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+    --badge-approved: #3caea3;
+    --badge-rejected: #e74c3c;
+    --badge-pending: #f39c12;
+  }
+
+  body {
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+    font-family: 'Inter', sans-serif;
+  }
+
+  .recruitment-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  /* ✅ Themed Buttons */
+  .btn-accent {
+    background-color: var(--accent-btn) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover) !important;
+  }
+
+  .btn-primary {
+    background-color: var(--accent-btn) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+  }
+  .btn-primary:hover {
+    background-color: var(--accent-btn-hover) !important;
+  }
+
+  /* Badge Styling */
+  .badge-approved { background-color: var(--badge-approved) !important; }
+  .badge-rejected { background-color: var(--badge-rejected) !important; }
+  .badge-pending  { background-color: var(--badge-pending)  !important; color: #fff; }
+
+  table.table th {
+    background-color: #f1f3f5;
+    font-weight: 600;
+  }
+
+  table.table td, table.table th {
+    vertical-align: middle;
+  }
+</style>
+
+<!-- ✅ Django Messages -->
+{% if messages %}
+  <div class="mb-3">
+    {% for message in messages %}
+      <div class="alert 
+          {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %} 
+          alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="container mt-4">
+  <div class="recruitment-card">
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Employee</th>
+            <th>Resume</th>
+            <th>Extracted Name</th>
+            <th>Extracted Email</th>
+            <th>Status</th>
+            <th>Submitted At</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in resume_data %}
+          <tr>
+            <td>{{ item.resume.employee.name }}</td>
+            <td>
+              {% if item.resume.resume %}
+                <a href="{{ item.resume.resume.url }}" target="_blank" class="btn btn-accent btn-sm">Download</a>
+              {% else %}
+                <span class="badge badge-pending">N/A</span>
+              {% endif %}
+            </td>
+
+            <!-- ✅ Extracted Info -->
+            <td>{{ item.applicant.name|default:"Not Extracted" }}</td>
+            <td>{{ item.applicant.email|default:"Not Extracted" }}</td>
+
+            <!-- ✅ Status -->
+            <td>
+              {% if item.applicant and item.applicant.email_sent_at %}
+                <span class="badge badge-approved">Email Sent</span>
+              {% elif item.applicant %}
+                <span class="badge badge-pending">Extracted</span>
+              {% else %}
+                <span class="badge badge-rejected">Not Extracted</span>
+              {% endif %}
+            </td>
+
+            <td>{{ item.resume.submitted_at|date:"Y-m-d H:i" }}</td>
+
+            <td>
+              <!-- Extract Button -->
+              {% if not item.applicant %}
+              <form method="POST" action="{% url 'extract_applicant' item.resume.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-sm">Extract</button>
+              </form>
+              {% endif %}
+
+              <!-- Send Email Button -->
+              {% if item.applicant and not item.applicant.email_sent_at %}
+              <form method="POST" action="{% url 'send_job_mail' item.resume.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-accent btn-sm">Send Email</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="text-center text-muted">No resumes submitted yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

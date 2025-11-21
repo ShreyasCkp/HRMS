@@ -1,0 +1,222 @@
+{% extends "employee_management/employee_dashboard1.html" %}
+{% block title %}My Payslips{% endblock %}
+
+{% block content %}
+<style>
+  .payslip-container {
+    max-width: 1000px;
+    margin: 2rem auto;
+    background-color: var(--card-bg);
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+
+  .payslip-container h3 {
+    font-weight: 600;
+    color: var(--text-dark);
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .styled-table {
+  width: 100%;
+  border-collapse: collapse; /* collapse borders for partitions */
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+}
+
+/* Borders around all table cells */
+.styled-table th,
+.styled-table td {
+  padding: 12px 15px;
+  text-align: center;
+  font-size: 0.95rem;
+  border: 1px solid #e0e0e0; /* light gray borders */
+  background-color: #fff;
+}
+
+/* Header styles */
+.styled-table thead th {
+  background: var(--active-bg);
+  color: white;
+  font-weight: 500;
+}
+
+/* Rounded corners on the table edges */
+.styled-table thead th:first-child {
+  border-top-left-radius: 10px;
+}
+
+.styled-table thead th:last-child {
+  border-top-right-radius: 10px;
+}
+
+.styled-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: 10px;
+}
+
+.styled-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: 10px;
+}
+
+
+  .btn-download {
+    background: var(--accent-btn);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    border: none;
+    transition: background 0.3s ease;
+  }
+
+  .btn-download:hover {
+    background: var(--accent-btn-hover);
+    color: white;
+  }
+
+  .chart-section {
+    margin-top: 3rem;
+    padding: 1rem;
+    border-top: 1px solid #ddd;
+  }
+
+  .chart-section h4 {
+    text-align: center;
+    font-weight: 600;
+    color: var(--text-dark);
+    margin-bottom: 1.5rem;
+  }
+
+  .alert {
+    margin-top: 1rem;
+  }
+
+  @media (max-width: 768px) {
+    .styled-table th, .styled-table td {
+      font-size: 0.85rem;
+    }
+
+    .btn-download {
+      font-size: 0.75rem;
+      padding: 5px 10px;
+    }
+  }
+</style>
+
+<div class="payslip-container">
+  <h3>My Payslips</h3>
+
+  {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+  {% elif payslips %}
+    <table class="styled-table">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Basic Salary</th>
+          <th>Net Salary</th>
+          <th>Status</th>
+          <th>Payslip</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in payslips %}
+        <tr>
+          <td>{{ p.formatted_month_year }}</td>
+          <td>₹{{ p.basic_salary }}</td>
+          <td>₹{{ p.net_salary }}</td>
+          <td>{{ p.status }}</td>
+          <td>
+            {% if p.payslip_pdf %}
+    {% if employee_userid == p.employee.employee_userid or request.user.is_staff %}
+        <a href="{% url 'download_payslip' p.id %}" class="btn-download">Download</a>
+    {% else %}
+        <span class="text-danger">Not authorized</span>
+    {% endif %}
+{% else %}
+    <span class="text-muted">Not available</span>
+{% endif %}
+
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Chart Section -->
+    <div class="chart-section">
+      <h4>Salary Graph</h4>
+      <canvas id="salaryChart" height="100"></canvas>
+    </div>
+
+    <!-- Chart Data -->
+    {{ chart_labels|json_script:"chart-labels" }}
+    {{ net_salaries|json_script:"chart-data" }}
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Chart Render -->
+    <script>
+      const labels = JSON.parse(document.getElementById('chart-labels').textContent);
+      const data = JSON.parse(document.getElementById('chart-data').textContent);
+
+      const ctx = document.getElementById('salaryChart').getContext('2d');
+      const salaryChart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [{
+      label: 'Net Salary (₹)',
+      data: data,
+      backgroundColor: 'rgba(40, 167, 69, 0.2)', // green, translucent
+      borderColor: '#28a745',                     // solid green line
+      borderWidth: 3,
+      tension: 0.3,
+      pointRadius: 5,
+      pointHoverRadius: 7,
+      pointBackgroundColor: '#28a745',            // green points
+      fill: true
+    }]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: {
+        beginAtZero: false,
+        title: {
+          display: true,
+          text: 'Net Salary (₹)'
+        }
+      },
+      x: {
+        title: {
+          display: true,
+          text: 'Month'
+        }
+      }
+    },
+    plugins: {
+      legend: {
+        position: 'top'
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            return '₹' + context.raw;
+          }
+        }
+      }
+    }
+  }
+});
+
+    </script>
+  {% else %}
+    <div class="alert alert-info">No payslips available yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

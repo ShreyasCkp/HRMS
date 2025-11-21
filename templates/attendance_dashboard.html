@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+
+{% block title %}Attendance | SmartHR ERP{% endblock %}
+
+{% block page_title %}
+<h2 class="fw-bold">Attendance</h2>
+{% endblock %}
+
+{% block top_actions %}
+  <div class="d-flex justify-content-between align-items-center w-100"> 
+  <a href="{% url 'attendance_list' %}" class="btn quick-action-btn">
+    <i class="bi bi-list"></i> View Attendance List
+  </a>
+  <!-- <a href="/attendance/attendance/add/" class="btn quick-action-btn">
+    <i class="bi bi-clock"></i> Clock In/Out
+  </a> -->
+  <span class="ms-3 fw-bold">{{ today_date }}</span>
+  </div>
+{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;
+    --accent-btn-hover: #2f8886;
+    --topbar-bg: #ffffff;
+    --topbar-border: #e0e0e0;
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+  }
+
+  /* KPI Cards */
+  .kpi-card {
+    background-color: var(--card-bg);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s;
+    padding: 1.5rem;
+    text-align: center;
+  }
+  .kpi-card:hover { transform: translateY(-3px); }
+
+  /* Quick Action Buttons */
+  .quick-action-btn {
+    background-color: var(--accent-btn);
+    color: #fff;
+    margin: 6px 8px 6px 0;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+    padding: 6px 12px;
+    text-decoration: none;
+  }
+  .quick-action-btn:hover { background-color: var(--accent-btn-hover); }
+
+  /* Card Header Style */
+  .card-header-custom {
+    font-weight: 600;
+    font-size: 1.1rem;
+    border-bottom: 2px solid var(--accent-btn);
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+    color: var(--text-dark);
+  }
+
+  /* Table Rows Hover */
+  .table-hover tbody tr:hover {
+    background-color: #e9f5f4;
+    transform: translateY(-2px);
+    transition: all 0.2s ease;
+  }
+
+  /* Table Buttons */
+  .btn-accent {
+    background-color: var(--accent-btn);
+    color: #fff;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover);
+  }
+
+  /* Icon Styling */
+  .bi {
+    vertical-align: middle;
+  }
+</style>
+
+<!-- KPI Cards -->
+<div class="row g-4 mb-4">
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-primary mb-2"><i class="bi bi-person-check"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ total_present }}</div>
+      <div class="text-muted mt-auto">Total Present</div>
+    </div>
+  </div>
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-danger mb-2"><i class="bi bi-person-x"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ total_absent }}</div>
+      <div class="text-muted mt-auto">Total Absent</div>
+    </div>
+  </div>
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-warning mb-2"><i class="bi bi-alarm"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ late_arrivals }}</div>
+      <div class="text-muted mt-auto">Late Arrivals</div>
+    </div>
+  </div>
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-success mb-2"><i class="bi bi-clock-history"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ avg_work_hours }}</div>
+      <div class="text-muted mt-auto">Avg Work Hrs</div>
+    </div>
+  </div>
+</div>
+
+<!-- Today's Attendance Table -->
+<div class="card p-3 mb-4">
+  <h4 class="card-header-custom">Today's Attendance List</h4>
+  <div class="table-responsive">
+    <table class="table table-bordered align-middle table-hover">
+      <thead class="table-light">
+        <tr>
+          <th>Employee</th>
+          <th>Clock In</th>
+          <th>Clock Out</th>
+          <th>Late Arrival</th>
+          <th>Early Exit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in today_attendance %}
+        <tr>
+          <td>{{ record.employee }}</td>
+          <td>{{ record.clock_in }}</td>
+          <td>{{ record.clock_out }}</td>
+          <td>
+            {% if record.late_arrival %}
+              <span class="badge bg-warning">Yes</span>
+            {% else %}No{% endif %}
+          </td>
+          <td>
+            {% if record.early_exit %}
+              <span class="badge bg-danger">Yes</span>
+            {% else %}No{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="text-center text-muted">No attendance records found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Weekly Overview -->
+<div class="card p-3 mt-4">
+  <h4 class="card-header-custom">Weekly Overview</h4>
+  <div class="row text-center">
+    {% for day in weekly_overview %}
+      {% if day.date|date:"l" != 'Sunday' %}
+        <div class="col">
+          <!-- Display the Day of the Week (e.g., Monday, Tuesday) -->
+          <div class="fw-bold">{{ day.date|date:"l" }}</div>  <!-- Day Name (e.g., Monday) -->
+
+          <!-- Display the Present Percentage -->
+          <div class="text-success">{{ day.present_percent }}% present</div>
+          
+          <!-- Display Present and Absent Counts -->
+          <small class="text-muted">{{ day.present }} present / {{ day.absent }} absent</small>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+
+{% endblock %}

@@ -1,0 +1,76 @@
+{% load humanize %}
+
+<h2>{{ job.title }}</h2>
+
+<p><strong>Department:</strong> {{ job.department.name }}</p>
+<p><strong>Location:</strong> {{ job.location }}</p>
+<p><strong>Vacancies:</strong> {{ job.vacancies }}</p>
+<p><strong>Work Mode:</strong> {{ job.work_mode }}</p>
+<p><strong>Employment Type:</strong> {{ job.get_employment_type_display }}</p>
+
+{% if job.experience_min or job.experience_max %}
+<p>
+  <strong>Experience:</strong>
+  {% if job.experience_min and job.experience_max %}
+    {{ job.experience_min }} – {{ job.experience_max }} years
+  {% elif job.experience_min %}
+    Minimum {{ job.experience_min }} years
+  {% elif job.experience_max %}
+    Up to {{ job.experience_max }} years
+  {% endif %}
+</p>
+{% endif %}
+
+{% if job.salary_min or job.salary_max %}
+<p>
+  <strong>Compensation Range:</strong>
+  {% if job.salary_min and job.salary_max %}
+    ₹{{ job.salary_min|intcomma }} – ₹{{ job.salary_max|intcomma }} per year
+  {% elif job.salary_min %}
+    From ₹{{ job.salary_min|intcomma }} per year
+  {% elif job.salary_max %}
+    Up to ₹{{ job.salary_max|intcomma }} per year
+  {% endif %}
+</p>
+{% endif %}
+
+{% if job.overview %}
+<h4>About the Role</h4>
+<p>{{ job.overview|linebreaks }}</p>
+{% endif %}
+
+{% if job.responsibilities %}
+<h4>Responsibilities</h4>
+<p>{{ job.responsibilities|linebreaks }}</p>
+{% endif %}
+
+{% if job.required_skills %}
+<h4>Required Skills</h4>
+<p>{{ job.required_skills|linebreaks }}</p>
+{% endif %}
+
+{% if job.preferred_skills %}
+<h4>Preferred Skills</h4>
+<p>{{ job.preferred_skills|linebreaks }}</p>
+{% endif %}
+
+{% if job.compensation_benefits %}
+<h4>Benefits</h4>
+<p>{{ job.compensation_benefits|linebreaks }}</p>
+{% endif %}
+
+{% if job.hiring_manager %}
+<p>
+  <strong>Hiring Manager:</strong>
+  {{ job.hiring_manager.get_full_name|default:job.hiring_manager.username }}
+</p>
+{% endif %}
+
+<!-- Apply button -->
+{% if apply_link %}
+<div style="margin-top: 20px;">
+    <a href="{{ apply_link }}" style="display:inline-block; padding:10px 20px; background:#3caea3; color:#fff; border-radius:50px; text-decoration:none;">
+        Apply for this Job
+    </a>
+</div>
+{% endif %}

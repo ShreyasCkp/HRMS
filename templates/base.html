@@ -1,0 +1,240 @@
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/inter.css' %}">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SmartHR ERP{% endblock %}</title>
+
+  <!-- Bootstrap & Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+
+  <!-- Custom Styling -->
+  <link href="{% static 'css/inter.css' %}" rel="stylesheet">
+  <style>
+    :root {
+      --sidebar-bg: #2f3e46;
+      --sidebar-color: #ffffff;
+      --sidebar-hover: #124e51;
+      --active-bg: #52796f;
+      --accent-btn: #3caea3;
+      --accent-btn-hover: #2f8886;
+      --topbar-bg: #ffffff;
+      --topbar-border: #e0e0e0;
+      --body-bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --text-dark: #333333;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--body-bg);
+      color: var(--text-dark);
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      background-color: var(--sidebar-bg);
+      color: var(--sidebar-color);
+      padding-top: 20px;
+      overflow-y: auto;
+      z-index: 1000;
+    }
+    .sidebar .sidebar-header {
+      font-size: 1.6rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 20px;
+      color: var(--sidebar-color);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .sidebar a {
+      display: block;
+      padding: 12px 20px;
+      color: var(--sidebar-color);
+      text-decoration: none;
+      font-weight: 500;
+      transition: background-color 0.3s, padding-left 0.2s;
+    }
+    .sidebar a:hover { background-color: var(--sidebar-hover); padding-left: 25px; }
+    .sidebar a.active { background-color: var(--active-bg); color: #fff; padding-left: 25px; }
+
+    /* Topbar */
+    .topbar {
+      position: fixed;
+      top: 0;
+      left: 240px;
+      right: 0;
+      height: 60px;
+      background-color: var(--topbar-bg);
+      border-bottom: 1px solid var(--topbar-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 30px;
+      z-index: 1000;
+    }
+    .topbar .welcome { font-size: 1.2rem; font-weight: 500; color: var(--text-dark); }
+    .logout-btn { background-color: var(--accent-btn); border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600; color: #fff !important; transition: background-color 0.2s; text-decoration: none; }
+    .logout-btn:hover { background-color: var(--accent-btn-hover); }
+
+    /* Main Content */
+    .content { margin-left: 240px; padding: 80px 30px 30px; }
+
+    /* Cards */
+    .profile-card, .kpi-card {
+      background-color: var(--card-bg);
+      border-radius: 10px;
+      padding: 25px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      margin-bottom: 30px;
+    }
+
+    /* Buttons */
+    .btn-edit, .btn-save { background-color: var(--accent-btn); color: #fff; border: none; border-radius: 6px; font-weight: 600; transition: background-color 0.2s; }
+    .btn-edit:hover, .btn-save:hover { background-color: var(--accent-btn-hover); }
+    .btn-cancel { background-color: #ddd; color: var(--text-dark); border: none; border-radius: 6px; padding: 8px 16px; margin-left: 10px; font-weight: 500; }
+
+    /* Sara Chatbot */
+    #sara-chatbot-widget { position: fixed; bottom: 20px; right: 20px; width: 300px; background-color: #fff; border: 1px solid #ccc; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.2); font-size: 14px; z-index: 9999; }
+    #sara-chatbot-header { background-color: var(--accent-btn); color: #fff; padding: 12px 16px; cursor: pointer; font-weight: bold; display: flex; justify-content: space-between; align-items: center; border-top-left-radius: 12px; border-top-right-radius: 12px; }
+    #sara-chatbot-body { display: flex; flex-direction: column; padding: 10px; max-height: 300px; overflow-y: auto; }
+    #sara-chatbot-messages { flex: 1; overflow-y: auto; margin-bottom: 10px; }
+    #sara-chatbot-form { display: flex; }
+    #sara-chatbot-input { flex: 1; border-radius: 6px 0 0 6px; border: 1px solid #ccc; padding: 6px 10px; }
+    #sara-chatbot-form button { background: var(--accent-btn); color: white; border: none; padding: 0 16px; border-radius: 0 6px 6px 0; cursor: pointer; transition: background 0.2s; }
+    #sara-chatbot-form button:hover { background: var(--accent-btn-hover); }
+
+    @media (max-width: 768px) {
+      .sidebar { width: 200px; }
+      .content { margin-left: 200px; padding: 80px 15px 15px; }
+      .topbar { left: 200px; padding: 0 15px; }
+    }
+  </style>
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">SmartHR ERP</div>
+    <nav>
+      <a class="nav-link {% if request.path == '/dashboard/' %}active{% endif %}" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#mastersSubmenu"><i class="bi bi-gear"></i> Masters <i class="bi bi-chevron-down ms-auto small"></i></a>
+      <div class="collapse" id="mastersSubmenu">
+            <a class="nav-link ps-5" href="/masters/users/">users</a>
+        <a class="nav-link ps-5" href="/masters/departments/">Departments</a>
+        <a class="nav-link ps-5" href="/masters/jobroles/">Job Roles</a>
+        <a class="nav-link ps-5" href="/masters/leavetypes/">Leave Types</a>
+        <a class="nav-link ps-5" href="/masters/kpis/">KPIs</a>
+        <a class="nav-link ps-5" href="/masters/interviewrounds/">Interview Rounds</a>
+      </div>
+      <a class="nav-link {% if '/employees' in request.path %}active{% endif %}" href="/employees/dashboard/"><i class="bi bi-people"></i> Employees</a>
+      <a class="nav-link {% if '/leaves' in request.path %}active{% endif %}" href="/leaves/dashboard/"><i class="bi bi-calendar-check"></i> Leave Management</a>
+      <a class="nav-link {% if '/attendance' in request.path %}active{% endif %}" href="/attendance/dashboard/"><i class="bi bi-clock-history"></i> Attendance</a>
+      <a class="nav-link {% if '/payroll' in request.path %}active{% endif %}" href="/payroll/dashboard/"><i class="bi bi-cash-coin"></i> Payroll</a>
+      <a class="nav-link {% if '/performance' in request.path %}active{% endif %}" href="/performance/dashboard/"><i class="bi bi-bar-chart-line"></i> Performance</a>
+      <a class="nav-link {% if '/recruitment' in request.path %}active{% endif %}" href="/recruitment/dashboard/"><i class="bi bi-briefcase"></i> Recruitment</a>
+    </nav>
+  </div>
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="welcome">Welcome, {{ user_display_name }}</div>
+
+
+      <!-- Logout -->
+      <a href="{% url 'logout' %}" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="content">
+    {% block top_actions %}{% endblock %}
+    {% block content %}{% endblock %}
+  </div>
+
+  <!-- Sara Chatbot -->
+  <div id="sara-chatbot-widget">
+    <div id="sara-chatbot-header">
+      <span><i class="bi bi-robot"></i> Sara <span style="font-size:0.9em;font-weight:400;">(HR Assistant)</span></span>
+      <button id="sara-chatbot-toggle" title="Close">&#x2715;</button>
+    </div>
+    <div id="sara-chatbot-body">
+      <div id="sara-chatbot-messages"></div>
+      <form id="sara-chatbot-form" autocomplete="off">
+        <input type="text" id="sara-chatbot-input" placeholder="Ask Sara anything...">
+        <button type="submit"><i class="bi bi-send"></i></button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const saraWidget = document.getElementById('sara-chatbot-widget');
+    const saraHeader = document.getElementById('sara-chatbot-header');
+    const saraBody = document.getElementById('sara-chatbot-body');
+    const saraToggle = document.getElementById('sara-chatbot-toggle');
+    const saraForm = document.getElementById('sara-chatbot-form');
+    const saraInput = document.getElementById('sara-chatbot-input');
+    const saraMessages = document.getElementById('sara-chatbot-messages');
+
+    saraBody.style.display = 'none';
+
+    saraHeader.onclick = function() {
+      if (saraWidget.classList.contains('open')) {
+        saraWidget.classList.remove('open');
+        saraBody.style.display = 'none';
+      } else {
+        saraWidget.classList.add('open');
+        saraBody.style.display = 'flex';
+        setTimeout(() => saraInput.focus(), 200);
+      }
+    };
+
+    saraToggle.onclick = function(e) {
+      e.stopPropagation();
+      saraWidget.classList.remove('open');
+      saraBody.style.display = 'none';
+    };
+
+    saraForm.onsubmit = function(e) {
+      e.preventDefault();
+      const msg = saraInput.value.trim();
+      if (!msg) return;
+      saraMessages.innerHTML += `<div><b>You:</b> ${msg}</div>`;
+      saraInput.value = '';
+      saraMessages.scrollTop = saraMessages.scrollHeight;
+
+      fetch('/chatbot/api/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+      })
+      .then(res => res.json())
+      .then(data => {
+        saraMessages.innerHTML += `<div><b>Sara:</b> ${data.answer}</div>`;
+        saraMessages.scrollTop = saraMessages.scrollHeight;
+      })
+      .catch(() => {
+        saraMessages.innerHTML += `<div><b>Sara:</b> Sorry, something went wrong.</div>`;
+        saraMessages.scrollTop = saraMessages.scrollHeight;
+      });
+    };
+  </script>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

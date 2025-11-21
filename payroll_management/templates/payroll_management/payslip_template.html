@@ -1,0 +1,269 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payslip</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="{% static 'css/payslip.css' %}">
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm 15mm 15mm 15mm;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .payslip-container {
+            background: #fff;
+            border: 2px solid #222;
+            max-width: 900px;
+            margin: 10px auto;
+            padding: 20px 20px 10px 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 1px solid #222;
+            padding-bottom: 10px;
+        }
+        .company-info {
+            font-size: 16px;
+        }
+        .company-logo img {
+            height: 60px;
+        }
+        .payslip-title {
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            margin: 15px 0 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+        th, td {
+            border: 1px solid #222;
+            padding: 5px 8px;
+            font-size: 13px;
+        }
+        th {
+            background: #f0f0f0;
+        }
+        .footer-note {
+            font-size: 11px;
+            color: #444;
+            margin-top: 10px;
+        }
+        .footer-note p strong {
+            display: block;
+            margin-top: 30px;
+        }
+        .footer-note p.signature {
+            margin-top: 72px;
+            text-align: right;
+            font-weight: bold;
+        }
+        .summary-table td, .summary-table th {
+            border: 1px solid #222;
+        }
+        .summary-table td {
+            font-size: 13px;
+        }
+        .earnings-deductions-table th, .earnings-deductions-table td {
+            vertical-align: middle;
+        }
+        .earnings-deductions-table th {
+            text-align: center;
+        }
+        .earnings-deductions-table td.amount {
+            text-align: right;
+        }
+        .earnings-deductions-table td {
+            width: 25%;
+        }
+        tr, td, th {
+            page-break-inside: avoid;
+        }
+    </style>
+</head>
+<body>
+<div class="payslip-container">
+    <!-- Header -->
+    <div class="header">
+        <div class="company-info">
+            <strong>CKP Software Technologies</strong>
+            <div></div>
+            <br>#303, 2nd Floor, 15th A Cross Rd, Sector A, Yelahanka Satellite Town,<br>
+            Yelahanka New Town, Bengaluru, Karnataka 560064
+        </div>
+        <div class="company-logo">
+            <img src="http://postimg.su/image/ttG7Hn3z/logo.png.png" alt="Company Logo">
+        </div>
+    </div>
+
+    <!-- Payslip Title -->
+    <div class="payslip-title">
+        Payslip for the month of {{ formatted_month_year }}
+    </div>
+
+    <!-- Employee Details Table -->
+    <table>
+        <tr>
+            <th>Employee ID.</th>
+            <td>{{ payroll.employee.emp_code|default:"-" }}</td>
+            <th>Aadhaar No.</th>
+            <td>
+                {% with aadhaar=payroll.employee.aadhaar_number %}
+                    {% if aadhaar %}XXXX-XXXX-{{ aadhaar|slice:"-4:" }}{% else %}-{% endif %}
+                {% endwith %}
+            </td>
+        </tr>
+        <tr>
+            <th>Employee Name</th>
+            <td>{{ payroll.employee.name|default:"-" }}</td>
+            <th>PAN No.</th>
+            <td>
+                {% with pan=payroll.employee.pan_number %}
+                    {% if pan %}XXXXXX{{ pan|slice:"-4:" }}{% else %}-{% endif %}
+                {% endwith %}
+            </td>
+        </tr>
+        <tr>
+            <th>Designation</th>
+            <td>{{ payroll.employee.designation|default:"-" }}</td>
+            <th>UAN No.</th>
+            <td>{{ payroll.employee.uan_number|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Location</th>
+            <td>{{ payroll.employee.location|default:"-" }}</td>
+            <th>PF Number</th>
+            <td>{{ payroll.employee.pf_number|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>DOB</th>
+            <td>{{ payroll.employee.dob|date:"d-m-Y"|default:"-" }}</td>
+            <th>ESI No.</th>
+            <td>{{ payroll.employee.esi_number|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>DOJ</th>
+            <td>{{ payroll.employee.joining_date|date:"d-m-Y"|default:"-" }}</td>
+            <th>LWOP Days</th>
+            <td>{{ payroll.lwop_days|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Days in Month</th>
+            <td>{{ payroll.days_in_month|default:"-" }}</td>
+            <th>Days Paid</th>
+            <td>{{ payroll.days_paid|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>LWD*</th>
+            <td>{{ payroll.lwd|default:"-" }}</td>
+        </tr>
+    </table>
+
+    <!-- Earnings & Deductions -->
+    <table class="earnings-deductions-table">
+        <tr>
+            <th colspan="2">EARNINGS & ALLOWANCES</th>
+            <th colspan="2">DEDUCTIONS</th>
+        </tr>
+        <tr>
+            <th>Description</th>
+            <th>INR</th>
+            <th>Description</th>
+            <th>INR</th>
+        </tr>
+        <tr>
+            <td>Basic Salary</td>
+            <td class="amount">{{ payroll.basic_salary|default:"0.00" }}</td>
+            <td>Employee PF Contribution</td>
+            <td class="amount">{{ payroll.pf_contribution|default:"0.00" }}</td>
+        </tr>
+        <tr>
+            <td>HRA</td>
+            <td class="amount">{{ payroll.hra|default:"0.00" }}</td>
+            <td>Professional Tax</td>
+            <td class="amount">{{ payroll.professional_tax|default:"0.00" }}</td>
+        </tr>
+        <tr>
+            <td>Special Allowance</td>
+            <td class="amount">{{ payroll.special_allowance|default:"0.00" }}</td>
+            <td>LWF Contribution</td>
+            <td class="amount">{{ payroll.lwf_contribution|default:"0.00" }}</td>
+        </tr>
+        <tr>
+            <td>Arrears</td>
+            <td class="amount">{{ payroll.arrears|default:"0.00" }}</td>
+            <td>Income Tax</td>
+            <td class="amount">{{ payroll.income_tax|default:"0.00" }}</td>
+        </tr>
+        <tr>
+            <td></td>
+            <td></td>
+            <td>L.W.O.P Amount</td>
+            <td class="amount">{{ payroll.lwop_amount|default:"0.00" }}</td>
+        </tr>
+        <tr>
+            <td><strong>Total Payments</strong></td>
+            <td class="amount">{{ payroll.total_payments|floatformat:2|default:"0.00" }}</td>
+            <td><strong>Total Deductions</strong></td>
+            <td class="amount">{{ payroll.total_deductions|floatformat:2|default:"0.00" }}</td>
+        </tr>
+        <tr>
+            <th colspan="2" style="text-align: center;">Net Pay</th>
+            <th colspan="2" class="amount">{{ payroll.net_salary|default:"0.00" }}</th>
+        </tr>
+        <tr>
+            <td colspan="4"><strong>Net Pay in Words:</strong> {{ payroll.net_pay_in_words|default:"-" }}</td>
+        </tr>
+    </table>
+
+    <!-- Bank Details -->
+    <table class="summary-table">
+        <tr>
+            <th>Bank Name</th>
+            <th>IFSC Code</th>
+            <th>Bank A/C Number</th>
+            <th>Amount (INR)</th>
+        </tr>
+        <tr>
+            <td style="text-align: center;">{{ payroll.employee.bank_name|default:"-" }}</td>
+            <td style="text-align: center;">{{ payroll.employee.ifsc_code|default:"-" }}</td>
+            <td style="text-align: center;">
+                {% with acc=payroll.employee.bank_account_number %}
+                    {% if acc %}XXXXXX{{ acc|slice:"-4:" }}{% else %}-{% endif %}
+                {% endwith %}
+            </td>
+            <td style="text-align: center;">{{ payroll.net_salary|default:"0.00" }}</td>
+        </tr>
+    </table>
+
+    <!-- Footer -->
+<!-- Footer -->
+ <div class="footer-note">
+        <img src="{% static 'images/signature_final.png' %}" 
+     style="width: 48px; display: block; margin-bottom: -29px; margin-left: 795px;">
+
+        <p style="margin-top: 10px; text-align: right;"><strong>Authorized Signature required</strong></p>
+        <p><strong>Please send your queries to HR Helpdesk hr@ckpsoftware.com</strong></p>
+        <p>
+            This payslip is confidential and is intended solely for the use of the addressed recipient.
+            You are not authorized to use or disclose it in any form if you have received this in error.
+            Please destroy it along with any copies and notify the sender immediately.
+        </p>
+        <p>LWD (Last Working Day)</p>
+    </div>
+
+</div>
+</body>
+</html>

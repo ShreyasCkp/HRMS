@@ -1,0 +1,8 @@
+{% extends "master/bare.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<h2>Welcome, {{ request.COOKIES.employee_name }}</h2>
+<p>This is your employee dashboard. Content will come later 🚀</p>
+<a href="{% url 'employee_logout' %}">Logout</a>
+{% endblock %}

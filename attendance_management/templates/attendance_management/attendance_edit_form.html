@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Edit Attendance{% endblock %}
+
+{% block content %}
+<h2>Edit Attendance for {{ attendance.employee.name }} - {{ attendance.date }}</h2>
+
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit" class="btn btn-success">Update</button>
+</form>
+{% endblock %}

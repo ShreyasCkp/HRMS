@@ -1,0 +1,75 @@
+{% extends "employee_management/employee_dashboard1.html" %}
+
+{% block title %}Employee Profile{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="profile-card">
+        <!-- Header -->
+        <div class="profile-header">
+            <h3>{{ employee.name }}</h3>
+            <p class="text-muted">{{ employee.designation }} | {{ employee.department }}</p>
+            {% if employee.photo %}
+                <img src="{{ employee.photo.url }}" alt="Employee Photo" class="employee-photo">
+            {% endif %}
+        </div>
+
+        <!-- Employment Info -->
+        <h5 class="section-title">Employment Details</h5>
+        <table class="table table-sm info-table">
+            <tr><th>Employee Code</th><td>{{ employee.emp_code }}</td></tr>
+            <tr><th>User ID</th><td>{{ employee.employee_userid }}</td></tr>
+            <tr><th>Department</th><td>{{ employee.department }}</td></tr>
+            <tr><th>Designation</th><td>{{ employee.designation }}</td></tr>
+            <tr><th>Job Role</th><td>{{ employee.job_role }}</td></tr>
+            <tr><th>Location</th><td>{{ employee.location }}</td></tr>
+            <tr><th>Joining Date</th><td>{{ employee.joining_date }}</td></tr>
+            <tr><th>Experience</th><td>{{ experience }}</td></tr>
+        </table>
+
+        <!-- Personal Info -->
+        <h5 class="section-title">Personal Details</h5>
+        <table class="table table-sm info-table">
+            <tr><th>DOB</th><td>{{ employee.dob }}</td></tr>
+            <tr><th>Email</th><td>{{ employee.email }}</td></tr>
+            <tr><th>Phone</th><td>{{ employee.phone }}</td></tr>
+            <tr><th>PAN</th><td>{{ employee.pan_number }}</td></tr>
+            <tr><th>Aadhaar</th><td>{{ employee.aadhaar_number }}</td></tr>
+            <tr><th>Contact</th><td>{{ employee.contact }}</td></tr>
+        </table>
+
+        <!-- Compliance Info -->
+        <h5 class="section-title">Compliance Numbers</h5>
+        <table class="table table-sm info-table">
+            <tr><th>UAN</th><td>{{ employee.uan_number }}</td></tr>
+            <tr><th>PF Number</th><td>{{ employee.pf_number }}</td></tr>
+            <tr><th>ESI Number</th><td>{{ employee.esi_number }}</td></tr>
+        </table>
+
+        <!-- Bank Details -->
+        <h5 class="section-title d-flex justify-content-between align-items-center">
+            Bank Details
+            {% if not bank_form %}
+                <a href="?edit_bank=true" class="btn btn-sm btn-outline-primary">Edit</a>
+            {% endif %}
+        </h5>
+
+        {% if bank_form %}
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                {{ bank_form.as_p }}
+                <button type="submit" class="btn btn-success btn-sm">Save Changes</button>
+                <a href="{% url 'employee_profile' %}" class="btn btn-secondary btn-sm">Cancel</a>
+            </form>
+        {% else %}
+            <table class="table table-sm info-table">
+                <tr><th>Bank Name</th><td>{{ employee.bank_name }}</td></tr>
+                <tr><th>IFSC Code</th><td>{{ employee.ifsc_code }}</td></tr>
+                <tr><th>Account Number</th><td>{{ employee.bank_account_number }}</td></tr>
+                <tr><th>Branch</th><td>{{ employee.branch_name }}</td></tr>
+            </table>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}

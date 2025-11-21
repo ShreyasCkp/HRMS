@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;       
+    --accent-btn-hover: #2f8886; 
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+    --border-light: #d1d5db;
+  }
+
+  body {
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* Card container */
+  .form-card {
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    background: var(--card-bg);
+    padding: 2rem;
+  }
+
+  /* Labels */
+  label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: block;
+    color: var(--text-dark);
+  }
+
+  /* Inputs */
+  input, select {
+    width: 100% !important;
+    height: 45px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    font-size: 14px;
+    background-color: #fff;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  input:focus, select:focus {
+    border-color: var(--accent-btn);
+    box-shadow: 0 0 0 3px rgba(60, 174, 163, 0.2);
+    outline: none;
+  }
+
+  /* Form groups spacing */
+  .form-group {
+    margin-bottom: 18px;
+  }
+
+  /* Buttons */
+  .btn-accent {
+    background-color: var(--accent-btn) !important;
+    color: #fff !important;
+    font-weight: 600;
+    min-width: 160px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover) !important;
+  }
+
+  .btn-secondary, .btn-warning, .btn-success, .btn-primary {
+    min-width: 160px;
+    border-radius: 8px;
+  }
+
+  .form-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: var(--text-dark);
+  }
+
+  /* Responsive two-column layout */
+  .row.g-3 > .col-md-6 {
+    margin-bottom: 15px;
+  }
+</style>
+
+<div class="container mt-5" style="max-width: 800px;">
+  <h2 class="form-title">Add Payroll</h2>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="form-card" id="payrollForm">
+    {% csrf_token %}
+
+    <div class="row g-3">
+      {% for field in form %}
+      <div class="col-md-6 form-group">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.errors %}
+          <div class="text-danger small">{{ field.errors }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="mt-4 d-flex flex-wrap gap-2 justify-content-center">
+      <!-- <button type="button" class="btn btn-warning" onclick="calculateNetSalary()">Calculate Net Salary</button> -->
+      <button type="submit" name="save" value="true" class="btn btn-success">Save</button>
+      <a href="{% url 'payroll_list' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+function calculateLwopAmount() {
+  let basic = parseFloat($('#id_basic_salary').val()) || 0;
+  let lwop_days = parseFloat($('#id_lwop_days').val()) || 0;
+  let daily_rate = basic / 30;
+  let lwop_amount = daily_rate * lwop_days;
+  $('#id_lwop_amount').val(lwop_amount.toFixed(2));
+  return lwop_amount;
+}
+
+function calculateNetSalary() {
+  let basic = parseFloat($('#id_basic_salary').val()) || 0;
+  let hra = parseFloat($('#id_hra').val()) || 0;
+  let special = parseFloat($('#id_special_allowance').val()) || 0;
+  let arrears = parseFloat($('#id_arrears').val()) || 0;
+  let pf = parseFloat($('#id_pf_contribution').val()) || 0;
+  let pt = parseFloat($('#id_professional_tax').val()) || 0;
+  let lwf = parseFloat($('#id_lwf_contribution').val()) || 0;
+  let it = parseFloat($('#id_income_tax').val()) || 0;
+  let lwop = parseFloat($('#id_lwop_amount').val()) || 0;
+
+  let totalPayments = basic + hra + special + arrears;
+  let totalDeductions = pf + pt + lwf + it + lwop;
+  let net = totalPayments - totalDeductions;
+
+  $('#id_total_payments').val(totalPayments.toFixed(2));
+  $('#id_total_deductions').val(totalDeductions.toFixed(2));
+  $('#id_net_salary').val(net.toFixed(2));
+}
+
+$(document).ready(function () {
+  let pfEdited = false;
+  let hraEdited = false;
+
+  // Track manual edits
+  $('#id_pf_contribution').on('input', function () {
+    pfEdited = true;
+    calculateNetSalary();
+  });
+
+  $('#id_hra').on('input', function () {
+    hraEdited = true;
+    calculateNetSalary();
+  });
+
+  // Whenever these change, recalculate (but only update PF/HRA if not manually edited)
+  $('#id_basic_salary, #id_special_allowance, #id_arrears, #id_professional_tax, #id_lwf_contribution, #id_income_tax, #id_lwop_days')
+    .on('input', function () {
+      let basic = parseFloat($('#id_basic_salary').val()) || 0;
+
+      if (!hraEdited) {
+        $('#id_hra').val((basic * 0.40).toFixed(2));
+      }
+
+      if (!pfEdited) {
+        $('#id_pf_contribution').val((basic * 0.12).toFixed(2));
+      }
+
+      calculateLwopAmount();
+      calculateNetSalary();
+    });
+
+  // Reset pfEdited/hraEdited when form is reset (optional)
+  $('#payrollForm').on('reset', function () {
+    pfEdited = false;
+    hraEdited = false;
+  });
+
+  $('#id_lwop_amount').on('input', function () {
+    calculateNetSalary();
+  });
+
+  $('#payrollForm').on('submit', function () {
+    calculateLwopAmount();
+    calculateNetSalary();
+  });
+});
+
+
+</script>
+
+<div id="snackbar" class="snackbar"></div>
+<style>
+  .snackbar {
+  visibility: hidden;
+  min-width: 300px;
+  background-color: #333;
+  color: #fff;
+  text-align: center;
+  border-radius: 8px;
+  padding: 16px;
+  position: fixed;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  font-size: 16px;
+  opacity: 0;
+  transition: opacity 0.5s ease, visibility 0.5s;
+}
+
+.snackbar.show {
+  visibility: visible;
+  opacity: 1;
+}
+
+</style>
+
+<script>
+  $(document).ready(function () {
+  {% if messages %}
+    {% for message in messages %}
+      showSnackbar("{{ message }}");
+    {% endfor %}
+  {% endif %}
+
+  function showSnackbar(text) {
+    var x = document.getElementById("snackbar");
+    x.textContent = text;
+    x.classList.add("show");
+    setTimeout(function () {
+      x.classList.remove("show");
+    }, 5000);
+  }
+});
+ 
+</script>
+{% endblock %}

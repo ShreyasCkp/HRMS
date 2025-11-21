@@ -1,0 +1,255 @@
+{% extends "employee_management/employee_dashboard1.html" %}
+{% load static %}
+
+{% block title %}Employee Calendar{% endblock %}
+
+{% block content %}
+<style>
+    .calendar-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2rem;
+        padding: 1rem;
+        justify-content: center;
+    }
+
+    .calendar-box {
+        flex: 1 1 60%;
+        padding: 20px;
+        background-color: var(--card-bg);
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .calendar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .calendar-header h2 {
+        color: var(--text-dark);
+        font-weight: 600;
+        font-size: 1.25rem;
+        margin: 0 auto;
+    }
+
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 6px;
+    }
+
+    .calendar-day-name {
+        font-weight: 500;
+        background-color: var(--active-bg);
+        color: white;
+        padding: 6px 0;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        text-align: center;
+    }
+
+    .calendar-day {
+        position: relative;
+        background-color: #ffffff;
+        border: 1px solid #dcdcdc;
+        padding: 10px 0;
+        border-radius: 6px;
+        color: #333;
+        font-size: 0.9rem;
+        text-align: center;
+        cursor: default;
+        min-height: 45px;
+    }
+
+    .calendar-day.today {
+        background-color: var(--accent-btn);
+        color: white;
+        border: 2px solid var(--accent-btn-hover);
+        font-weight: bold;
+    }
+
+    .calendar-day.green {
+        background-color: #28a745;
+        color: white;
+    }
+
+    .calendar-day.yellow {
+        background-color: #ffc107;
+        color: #000;
+    }
+
+    .calendar-legend {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        margin-top: 1rem;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.85rem;
+    }
+
+    .legend-color {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        display: inline-block;
+    }
+
+    .green { background-color: #28a745; }
+    .yellow { background-color: #ffc107; }
+
+    .event-box {
+        flex: 1 1 35%;
+        padding: 20px;
+        background-color: var(--card-bg);
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        max-height: 520px;
+        overflow-y: auto;
+    }
+
+    .event-box h3 {
+        color: var(--text-dark);
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 15px;
+    }
+
+    .leave-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .leave-item {
+        background: #f8f9fa;
+        border: 1px solid #ddd;
+        border-left: 5px solid var(--active-bg);
+        padding: 10px 12px;
+        border-radius: 6px;
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .status-green {
+        color: #28a745;
+        font-weight: 600;
+    }
+
+    .status-yellow {
+        color: #ffc107;
+        font-weight: 600;
+    }
+
+    .btn-sm {
+        font-size: 0.75rem;
+        padding: 4px 10px;
+    }
+
+    .status-red {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.legend-color.red {
+    background-color: #dc3545;
+}
+
+.calendar-day.red {
+    background-color: #dc3545;
+    color: white;
+}
+
+</style>
+
+<div class="calendar-container">
+
+    <!-- Calendar Section -->
+    <div class="calendar-box">
+        <div class="calendar-header">
+            <a class="btn btn-outline-secondary btn-sm" href="?year={{ prev_year }}&month={{ prev_month }}">←</a>
+            <h2> {{ month_name }} {{ year }}</h2>
+            <a class="btn btn-outline-secondary btn-sm" href="?year={{ next_year }}&month={{ next_month }}">→</a>
+        </div>
+
+        <!-- Weekdays -->
+        <div class="calendar-grid">
+            {% for wd in weekdays %}
+                <div class="calendar-day-name">{{ wd }}</div>
+            {% endfor %}
+        </div>
+
+        <!-- Calendar Days -->
+        <div class="calendar-grid mt-2">
+            {% for week in month_days %}
+                {% for day in week %}
+                    <div class="calendar-day
+    {% if day == today %} today {% endif %}
+    {% for hl in highlights_json %}
+        {% if hl.date_day == day.day and hl.date_month == day.month and hl.date_year == day.year %}
+            {% if hl.color == 'green' %} green
+            {% elif hl.color == 'orange' %} yellow
+            {% elif hl.color == 'red' %} red
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+">
+    {{ day.day }}
+</div>
+
+                {% endfor %}
+            {% endfor %}
+        </div>
+
+        <!-- Legend -->
+       <div class="calendar-legend">
+    <div class="legend-item"><span class="legend-color green"></span> Approved</div>
+    <div class="legend-item"><span class="legend-color yellow"></span> Pending</div>
+    <div class="legend-item"><span class="legend-color red"></span> Rejected</div> <!-- ✅ Add this -->
+</div>
+
+    </div>
+
+    <!-- Event / Leave Box -->
+    <div class="event-box">
+        <div class="d-flex justify-content-between align-items-center">
+            <h3>Leaves This Month</h3>
+            <a href="{% url 'employee_leave_create' %}" class="btn btn-edit btn-sm">Apply Leave</a>
+        </div>
+
+        <ul class="leave-list mt-3">
+            {% for leave in leaves_list %}
+                <li class="leave-item">
+                    <div>
+                        <strong>{{ leave.leave_type }}</strong><br>
+                        {{ leave.start_date }} → {{ leave.end_date }}<br>
+                        <small>{{ leave.reason }}</small>
+                    </div>
+                    <div>
+                       {% if leave.status == 'approved' %}
+    <span class="status-green">Approved</span>
+{% elif leave.status == 'rejected' %}
+    <span class="status-red">Rejected</span>
+{% else %}
+    <span class="status-yellow">Pending</span>
+{% endif %}
+
+                    </div>
+                </li>
+            {% empty %}
+                <li class="leave-item">No leaves applied this month.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

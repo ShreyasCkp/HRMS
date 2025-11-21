@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+{% block title %}Employees | SmartHR ERP{% endblock %}
+
+
+{% block page_title %}
+<h2 class="fw-bold">Employees</h2>
+{% endblock %}
+
+{% block top_actions %}
+  <a href="/employees/employees/add/" class="btn quick-action-btn">
+    <i class="bi bi-person-plus"></i> Add Employee
+  </a>
+{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;
+    --accent-btn-hover: #2f8886;
+    --topbar-bg: #ffffff;
+    --topbar-border: #e0e0e0;
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+  }
+
+  /* KPI Cards */
+  .kpi-card {
+    background-color: var(--card-bg);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s;
+    padding: 1.5rem;
+    text-align: center;
+  }
+  .kpi-card:hover { transform: translateY(-3px); }
+
+  /* Quick Action Buttons */
+  .quick-action-btn {
+    background-color: var(--accent-btn);
+    color: #fff;
+    margin: 6px 8px 6px 0;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+    padding: 6px 12px;
+    text-decoration: none;
+  }
+  .quick-action-btn:hover { background-color: var(--accent-btn-hover); }
+
+  /* Card Header Style */
+  .card-header-custom {
+    font-weight: 600;
+    font-size: 1.1rem;
+    border-bottom: 2px solid var(--accent-btn);
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+    color: var(--text-dark);
+  }
+
+  /* Table Rows Hover */
+  .table-hover tbody tr:hover {
+    background-color: #e9f5f4;
+    transform: translateY(-2px);
+    transition: all 0.2s ease;
+  }
+
+  /* Table Buttons */
+  .btn-accent {
+    background-color: var(--accent-btn);
+    color: #fff;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover);
+  }
+
+  /* Icon Styling */
+  .bi, .fas {
+    vertical-align: middle;
+  }
+</style>
+
+<!-- KPI Cards -->
+<div class="row g-4 mb-4">
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-primary mb-2"><i class="bi bi-people"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ total_employees }}</div>
+      <div class="text-muted mt-auto">Total Employees</div>
+    </div>
+  </div>
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-success mb-2"><i class="bi bi-person-check"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ active_employees }}</div>
+      <div class="text-muted mt-auto">Active</div>
+    </div>
+  </div>
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-danger mb-2"><i class="bi bi-person-x"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ on_leave_today }}</div>
+      <div class="text-muted mt-auto">On Leave</div>
+    </div>
+  </div>
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-warning mb-2"><i class="bi bi-person-plus"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ new_hires }}</div>
+      <div class="text-muted mt-auto">New Hires</div>
+    </div>
+  </div>
+</div>
+
+<!-- Employee Table -->
+<div class="card p-3">
+  <h4 class="card-header-custom">Employee Directory</h4>
+  <div class="table-responsive">
+    <table class="table table-bordered align-middle table-hover">
+      <thead class="table-light">
+        <tr>
+          <th>Employee ID</th>
+          <th>Password</th>
+          <th>Name</th>
+          <th>Department</th>
+          <th>Job Role</th>
+          <th>Contact</th>
+          <th>Joining Date</th>
+          <th>Active</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for emp in employees %}
+        <tr>
+          <td>{{ emp.employee_userid }}</td>
+          <td>{{ emp.employee_password }}</td>
+          <td>{{ emp.name }}</td>
+          <td>{{ emp.department }}</td>
+          <td>{{ emp.job_role }}</td>
+          <td>{{ emp.contact }}</td>
+          <td>{{ emp.joining_date }}</td>
+          <td>
+            {% if emp.status == 'On Leave' %}
+              <span class="badge bg-danger">On Leave</span>
+            {% elif emp.is_active %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-secondary">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="d-flex gap-1">
+            <a href="{% url 'employee_view' emp.pk %}" class="btn-accent btn btn-sm" title="View">
+              <i class="bi bi-eye"></i>
+            </a>
+            <a href="{% url 'employee_edit' emp.pk %}" class="btn-accent btn btn-sm" title="Edit">
+              <i class="bi bi-pencil-square"></i>
+            </a>
+            <a href="{% url 'employee_delete' emp.pk %}" class="btn-accent btn btn-sm" title="Delete" onclick="return confirm('Are you sure?');">
+              <i class="bi bi-trash"></i>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9" class="text-center text-muted">No employees found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

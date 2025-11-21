@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block title %}Set Passcode{% endblock %}
+
+{% block content %}
+<div class="container mt-5" style="max-width: 400px;">
+    <h3 class="mb-4">Set Your Passcode</h3>
+
+    {% if error %}
+        <div style="color: red; margin-bottom: 10px;">{{ error }}</div>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="passcode">Enter 4-digit Passcode</label>
+            <input type="password" name="passcode" class="form-control" maxlength="4" required>
+        </div>
+        <div class="mb-3">
+            <label for="confirm_passcode">Confirm Passcode</label>
+            <input type="password" name="confirm_passcode" class="form-control" maxlength="4" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Passcode</button>
+    </form>
+</div>
+{% endblock %}

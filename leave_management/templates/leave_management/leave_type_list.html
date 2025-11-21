@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Leave Types{% endblock %}
+{% block content %}
+<h2>Leave Types</h2>
+<a href="{% url 'leave_type_create' %}" class="btn btn-primary mb-2">Add Leave Type</a>
+<table class="table table-bordered">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Description</th>
+      <th>Default Balance</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in types %}
+    <tr>
+      <td>{{ t.name }}</td>
+      <td>{{ t.description }}</td>
+      <td>{{ t.default_balance }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

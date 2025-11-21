@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% load widget_tweaks %}
+{% block title %}{% if view_mode %}View User{% elif edit_mode %}Edit User{% else %}Add User{% endif %}{% endblock %}
+
+{% block content %}
+<style>
+  :root { --accent-btn:#3caea3; --accent-btn-hover:#2f8886;
+          --border-light:#d1d5db; --text-dark:#333; }
+  .form-card{max-width:650px;margin:40px auto;padding:2rem;
+    border-radius:12px;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.08);}
+  label{font-weight:600;color:var(--text-dark);}
+  input[type=text],input[type=password],input[type=number],select{
+    width:100%;padding:10px 12px;border:1px solid var(--border-light);
+    border-radius:8px;font-size:14px;}
+  input:focus{border-color:var(--accent-btn);outline:none;}
+  .btn-accent{background:var(--accent-btn)!important;color:#fff!important;font-weight:600;
+    min-width:140px;border-radius:8px;}
+  .btn-accent:hover{background:var(--accent-btn-hover)!important;}
+  .password-error{color:red;font-size:0.9rem;margin-top:4px;display:none;} /* ⚡ Hidden by default */
+  .checkbox-wrap{display:flex;align-items:center;gap:6px;}
+</style>
+
+<div class="container">
+  <form method="post" class="form-card" id="userForm" novalidate>
+    {% csrf_token %}
+    <h3 class="text-center mb-4">
+      {% if view_mode %}View User{% elif edit_mode %}Edit User{% else %}Add User{% endif %}
+    </h3>
+
+    {% for field in form.visible_fields %}
+      <div class="form-group mb-3">
+        {% if field.name == "is_locked" %}
+          <label class="checkbox-wrap">
+            {{ field }} {{ field.label }}
+          </label>
+
+        {% elif field.name == "password" %}
+          {# ⚡ Always render password value as plain text value #}
+          <label for="id_password">{{ field.label }}</label>
+          <input type="text" name="password" id="id_password"
+                 value="{{ field.value|default_if_none:'' }}"
+                 class="form-control"
+                 {% if view_mode %}readonly{% endif %} />
+
+          {# Only show help text if form fails validation #}
+          {% if field.errors %}
+            <div class="password-error">{{ field.errors.0 }}</div>
+          {% endif %}
+
+        {% else %}
+          {{ field.label_tag }}
+          {{ field|add_class:"form-control" }}
+        {% endif %}
+
+        {% if field.help_text and not view_mode and field.name != "password" %}
+          <small class="form-text text-muted">{{ field.help_text }}</small>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    {% if not view_mode %}
+    <div class="d-flex justify-content-center mt-4 gap-2">
+      <button type="submit" class="btn btn-accent">Save</button>
+      <a href="{% url 'user_list' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+{% if not view_mode %}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  const pwd = document.getElementById('id_password');
+  if (!pwd) return;
+  const form = document.getElementById('userForm');
+
+  // Create error div dynamically (hidden initially)
+  const errorDiv = document.createElement('div');
+  errorDiv.className = 'password-error';
+  errorDiv.innerText = "Start with a capital letter, include lowercase, one special character, and one number. Length 8–16.";
+  pwd.parentNode.appendChild(errorDiv);
+
+  function validatePwd(){
+    const v = pwd.value.trim();
+    // allow empty in edit mode
+    if(!v && {{ edit_mode|yesno:"true,false" }}){ errorDiv.style.display='none'; return true; }
+    const re = /^[A-Z](?=.*[a-z])(?=.*[0-9])(?=.*[!@#$%^&*])[A-Za-z0-9!@#$%^&*]{7,15}$/;
+    if(v && !re.test(v)){
+      errorDiv.style.display='block';   // ⚡ Show only when invalid
+      return false;
+    }
+    errorDiv.style.display='none';
+    return true;
+  }
+
+  pwd.addEventListener('blur', validatePwd);
+  form.addEventListener('submit', function(e){
+    if(!validatePwd()){ e.preventDefault(); pwd.focus(); }
+  });
+});
+</script>
+{% endif %}
+{% endblock %}

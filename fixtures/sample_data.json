@@ -1,0 +1,38 @@
+[
+  {
+    "model": "auth.user",
+    "pk": 1,
+    "fields": {
+      "username": "admin",
+      "is_superuser": true,
+      "is_staff": true,
+      "is_active": true,
+      "email": "admin@smarthr.com",
+      "password": "pbkdf2_sha256$260000$dummy$dummyhash"
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 2,
+    "fields": {
+      "username": "hrmanager",
+      "is_superuser": false,
+      "is_staff": true,
+      "is_active": true,
+      "email": "hr@smarthr.com",
+      "password": "pbkdf2_sha256$260000$dummy$dummyhash"
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 3,
+    "fields": {
+      "username": "employee1",
+      "is_superuser": false,
+      "is_staff": false,
+      "is_active": true,
+      "email": "employee1@smarthr.com",
+      "password": "pbkdf2_sha256$260000$dummy$dummyhash"
+    }
+  }
+]

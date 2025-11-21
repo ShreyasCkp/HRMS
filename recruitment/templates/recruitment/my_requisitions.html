@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+
+{% block title %}Recruitment | SmartHR ERP{% endblock %}
+
+{% block page_title %}
+<h2 class="fw-bold">Recruitment</h2>
+{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;       /* ✅ Accent color */
+    --accent-btn-hover: #2f8886; /* ✅ Hover color */
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+    --badge-approved: #3caea3;
+    --badge-rejected: #e74c3c;
+    --badge-pending: #f39c12;
+  }
+
+  body {
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+    font-family: 'Inter', sans-serif;
+  }
+
+  .recruitment-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  /* ✅ Themed Buttons */
+  .btn-accent {
+    background-color: var(--accent-btn) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover) !important;
+  }
+
+  .btn-approve {
+    background-color: #28a745 !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px;
+  }
+  .btn-approve:hover { background-color: #218838 !important; }
+
+  .btn-reject {
+    background-color: #dc3545 !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px;
+  }
+  .btn-reject:hover { background-color: #c82333 !important; }
+
+  /* ✅ Badge Styling */
+  .badge-approved {
+    background-color: var(--badge-approved) !important;
+  }
+  .badge-rejected {
+    background-color: var(--badge-rejected) !important;
+  }
+  .badge-pending {
+    background-color: var(--badge-pending) !important;
+    color: #fff;
+  }
+
+  table.table th {
+    background-color: #f1f3f5;
+    font-weight: 600;
+  }
+
+  .modal-content {
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+</style>
+
+<div class="container mt-4">
+  <div class="recruitment-card">
+
+    <!-- ✅ Post Job Button -->
+    <div class="mb-3 text-start">
+      <a href="{% url 'create_requisition' %}" class="btn btn-accent">
+        <i class="bi bi-plus-circle"></i> Post Job
+      </a>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Department</th>
+            <th>Created At</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for requisition in requisitions %}
+          <tr>
+            <td>{{ requisition.id }}</td>
+            <td>{{ requisition.title }}</td>
+            <td>{{ requisition.department }}</td>
+            <td>{{ requisition.created_at|date:"Y-m-d H:i" }}</td>
+            <td class="action-cell">
+              <!-- Always show View -->
+              <a href="{% url 'job_detail' requisition.id %}"
+                 class="btn btn-accent btn-sm">View</a>
+
+              {% if requisition.status == "pending" %}
+                  <button class="btn btn-approve btn-sm"
+                          onclick="openConfirmModal({{ requisition.id }}, 'approved')">
+                      Approve
+                  </button>
+                  <button class="btn btn-reject btn-sm"
+                          onclick="openConfirmModal({{ requisition.id }}, 'rejected')">
+                      Reject
+                  </button>
+              {% else %}
+                  <span class="badge 
+                    {% if requisition.status == 'approved' %}badge-approved
+                    {% elif requisition.status == 'rejected' %}badge-rejected
+                    {% else %}badge-pending{% endif %}">
+                    {{ requisition.status|capfirst }}
+                  </span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" class="text-center">No requisitions found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ Confirmation Modal -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Action</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-accent" id="confirmBtn">Yes, Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let selectedId = null;
+let selectedStatus = null;
+
+function openConfirmModal(requisitionId, status) {
+    selectedId = requisitionId;
+    selectedStatus = status;
+
+    document.getElementById('confirmMessage').innerText =
+        `Are you sure you want to ${status.toLowerCase()} requisition #${requisitionId}?`;
+
+    let modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    modal.show();
+}
+
+document.getElementById('confirmBtn').addEventListener('click', function () {
+    if (!selectedId || !selectedStatus) return;
+
+    const url = "{% url 'update_status' 0 'dummy' %}"
+                .replace('0', selectedId)
+                .replace('dummy', selectedStatus);
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status) {
+            const cell = document.querySelector(
+                `button[onclick*='${selectedId}']`
+            ).closest('.action-cell');
+
+            // Replace actions with View + Status Badge
+            cell.innerHTML = `
+                <a href="/recruitment/job/${selectedId}/" class="btn btn-accent btn-sm">View</a>
+                <span class="badge ${data.status.toLowerCase() === 'approved' ? 'badge-approved' : 'badge-rejected'}">
+                    ${data.status.charAt(0).toUpperCase() + data.status.slice(1)}
+                </span>
+            `;
+        }
+        let modalEl = document.getElementById('confirmModal');
+        let modal = bootstrap.Modal.getInstance(modalEl);
+        modal.hide();
+    })
+    .catch(error => console.error('Error:', error));
+});
+</script>
+{% endblock %}

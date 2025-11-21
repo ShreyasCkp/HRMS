@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Payroll Dashboard{% endblock %}
+{% block content %}
+<h2>Payroll Dashboard</h2>
+<div class="mb-3">
+  <a href="{% url 'payroll_create' %}" class="btn btn-success">Add Payroll</a>
+  <a href="{% url 'payroll_export' %}" class="btn btn-primary">Export Payroll</a>
+  <a href="{% url 'payroll_process' %}" class="btn btn-warning">Process Payroll</a>
+</div>
+<table class="table table-bordered">
+  <thead>
+    <tr>
+      <th>Employee</th>
+      <th>Month</th>
+      <th>Net Salary</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for payroll in payrolls %}
+    <tr>
+      <td>{{ payroll.employee }}</td>
+      <td>{{ payroll.month }}</td>
+      <td>{{ payroll.net_salary }}</td>
+      <td>{{ payroll.status }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4" class="text-muted">No payroll records found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

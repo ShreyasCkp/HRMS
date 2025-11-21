@@ -1,0 +1,296 @@
+{% extends 'base.html' %}
+{% block title %}Leave Management | SmartHR ERP{% endblock %}
+
+{% block page_title %}
+<h2 class="fw-bold">Leave Management</h2>
+{% endblock %}
+
+{% block top_actions %}
+<!-- You can add any top action buttons if needed -->
+{% endblock %}
+
+{% block content %}
+<style>
+:root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;
+    --accent-btn-hover: #2f8886;
+    --topbar-bg: #ffffff;
+    --topbar-border: #e0e0e0;
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+}
+
+/* KPI Cards */
+.kpi-card {
+    background-color: var(--card-bg);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s;
+    padding: 1.5rem;
+    text-align: center;
+}
+.kpi-card:hover { transform: translateY(-3px); }
+
+/* Table styling */
+.table-hover tbody tr:hover {
+    background-color: #e9f5f4;
+    transform: translateY(-2px);
+    transition: all 0.2s ease;
+}
+.table th, .table td {
+    vertical-align: middle !important;
+    text-align: center;
+}
+.card-header-custom {
+    font-weight: 600;
+    font-size: 1.1rem;
+    border-bottom: 2px solid var(--accent-btn);
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+    color: var(--text-dark);
+}
+
+/* Buttons */
+.btn-action, .btn-accent {
+    border-radius: 5px;
+    font-size: 0.85rem;
+    padding: 4px 8px;
+    font-weight: 600;
+    transition: background 0.2s;
+    color: #fff;
+    text-decoration: none;
+}
+.btn-approve { background-color: #28a745; }
+.btn-approve:hover { background-color: #218838; }
+.btn-reject { background-color: #dc3545; }
+.btn-reject:hover { background-color: #b02a37; }
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.4);
+    justify-content: center;
+    align-items: center;
+}
+.modal-content {
+    background: #fff;
+    padding: 20px;
+    border-radius: 10px;
+    width: 400px;
+    text-align: center;
+    box-shadow: 0px 6px 18px rgba(0,0,0,0.2);
+}
+.modal h3 { margin-bottom: 15px; color: #333; }
+textarea {
+    width: 100%;
+    padding: 6px;
+    margin-top: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 13px;
+    resize: vertical;
+}
+.modal-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+}
+.btn-yes { background-color: #28a745; color: #fff; }
+.btn-no { background-color: #6c757d; color: #fff; }
+
+/* Snackbar */
+#snackbar {
+    visibility: hidden;
+    min-width: 250px;
+    margin-left: -125px;
+    background-color: #333;
+    color: #fff;
+    text-align: center;
+    border-radius: 4px;
+    padding: 12px;
+    position: fixed;
+    z-index: 11000;
+    left: 50%;
+    bottom: 30px;
+    font-size: 14px;
+}
+#snackbar.show {
+    visibility: visible;
+    animation: fadein 0.5s, fadeout 0.5s 2.5s;
+}
+@keyframes fadein { from { bottom: 0; opacity: 0; } to { bottom: 30px; opacity: 1; } }
+@keyframes fadeout { from { bottom: 30px; opacity: 1; } to { bottom: 0; opacity: 0; } }
+
+/* Search input */
+.search-input {
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 220px;
+    margin-bottom: 15px;
+}
+</style>
+
+<!-- KPI Cards -->
+<div class="row g-4 mb-4">
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-primary mb-2"><i class="bi bi-clipboard-data"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ total_requests }}</div>
+      <div class="text-muted mt-auto">Total Requests</div>
+    </div>
+  </div>
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-warning mb-2"><i class="bi bi-hourglass-split"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ pending_requests }}</div>
+      <div class="text-muted mt-auto">Pending</div>
+    </div>
+  </div>
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-success mb-2"><i class="bi bi-check-circle"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ approved_requests }}</div>
+      <div class="text-muted mt-auto">Approved</div>
+    </div>
+  </div>
+  <div class="col-md-3 d-flex">
+    <div class="card kpi-card flex-fill d-flex flex-column h-100">
+      <div class="fs-2 text-danger mb-2"><i class="bi bi-x-circle"></i></div>
+      <div class="fw-bold fs-4 mb-1">{{ rejected_requests }}</div>
+      <div class="text-muted mt-auto">Rejected</div>
+    </div>
+  </div>
+</div>
+
+<!-- Leave Requests Table -->
+<div class="card p-3">
+    <h4 class="card-header-custom">Leave Requests</h4>
+   
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle table-hover">
+        <thead class="table-light">
+          <tr>
+            <th>Employee</th>
+            <th>Leave Type</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Approved By</th>
+            <th>Admin Reason</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for leave in leave_requests %}
+          <tr>
+            <td>{{ leave.employee }}</td>
+            <td>{{ leave.get_leave_type_display }}</td>
+            <td>{{ leave.start_date }}</td>
+            <td>{{ leave.end_date }}</td>
+            <td>{{ leave.reason|default:"-" }}</td>
+            <td>
+                {% if leave.is_approved is True %}✅ Approved
+                {% elif leave.is_approved is False %}❌ Rejected
+                {% else %}⏳ Pending
+                {% endif %}
+            </td>
+            <td>{{ leave.approved_by|default:"-" }}</td>
+            <td>{{ leave.admin_reason|default:"-" }}</td>
+            <td class="d-flex gap-1 justify-content-center">
+                {% if leave.is_approved is None %}
+                    <button class="btn-action btn-approve" onclick="openModal('approve', '{% url 'leave_approve' leave.id %}')">Approve</button>
+                    <button class="btn-action btn-reject" onclick="openModal('reject', '{% url 'leave_reject' leave.id %}')">Reject</button>
+                {% else %}
+                    <span class="text-muted">Action Taken</span>
+                {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="9" class="text-center text-muted">No leave requests found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+</div>
+
+<!-- Modal -->
+<div id="confirmModal" class="modal">
+    <div class="modal-content">
+        <h3 id="modalMessage">Provide Reason</h3>
+        <form id="actionForm" method="post">
+            {% csrf_token %}
+            <textarea name="admin_reason" id="admin_reason" rows="3" placeholder="Enter reason..."></textarea>
+            <div class="modal-buttons">
+                <button type="submit" class="btn-yes">Submit</button>
+                <button type="button" class="btn-no" onclick="closeModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="snackbar"></div>
+
+<script>
+let actionUrl = "";
+
+document.getElementById('leaveSearch').addEventListener('input', function () {
+    const filter = this.value.toLowerCase();
+    const rows = document.querySelectorAll('table tbody tr');
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        const rowText = Array.from(cells).map(td => td.textContent.toLowerCase()).join(' ');
+        row.style.display = rowText.includes(filter) ? '' : 'none';
+    });
+});
+
+function openModal(type, url) {
+    actionUrl = url;
+    document.getElementById("modalMessage").textContent =
+        type === 'approve' ? "Approve Leave - Provide Reason" : "Reject Leave - Provide Reason";
+    document.getElementById("actionForm").action = actionUrl;
+    document.getElementById("confirmModal").style.display = "flex";
+    document.body.style.overflow = "hidden";
+}
+
+function closeModal() {
+    document.getElementById("confirmModal").style.display = "none";
+    document.getElementById("admin_reason").value = "";
+    document.body.style.overflow = "auto";
+}
+
+function showSnackbar(message) {
+    const snackbar = document.getElementById("snackbar");
+    snackbar.textContent = message;
+    snackbar.className = "show";
+    setTimeout(() => { snackbar.className = snackbar.className.replace("show", ""); }, 3000);
+}
+
+{% if messages %}
+    {% for message in messages %}
+        showSnackbar("{{ message|escapejs }}");
+    {% endfor %}
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+
+{% block title %}Payroll Records | SmartHR ERP{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;
+    --accent-btn-hover: #2f8886;
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+    --badge-paid: #3caea3;
+    --badge-unpaid: #dc3545;
+  }
+
+  body {
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+    font-family: 'Inter', sans-serif;
+  }
+
+  .payroll-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Themed Buttons */
+  .btn-accent {
+    background-color: var(--accent-btn) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover) !important;
+  }
+
+  .btn-info {
+    border-radius: 6px;
+  }
+  .btn-warning {
+    border-radius: 6px;
+  }
+  .btn-success {
+    border-radius: 6px;
+  }
+
+  /* Badge Styling */
+  .badge-paid {
+    background-color: var(--badge-paid) !important;
+    color: #fff;
+  }
+  .badge-unpaid {
+    background-color: var(--badge-unpaid) !important;
+    color: #fff;
+  }
+
+  table.table th {
+    background-color: #f1f3f5;
+    font-weight: 600;
+  }
+
+  .table-hover tbody tr:hover {
+    background-color: #e9f5f4;
+    transform: translateY(-2px);
+    transition: all 0.2s ease;
+  }
+</style>
+
+<div class="container mt-4">
+  <div class="payroll-card">
+    <div class="mb-3 d-flex gap-2 flex-wrap">
+      <a href="{% url 'payroll_create' %}" class="btn btn-accent"><i class="bi bi-plus-circle"></i> Add Payroll</a>
+    </div>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle table-hover">
+        <thead class="table-light">
+          <tr>
+            <th>Employee</th>
+            <th>Month</th>
+            <th>Basic Salary</th>
+           
+            <th>Net Salary</th>
+            <th>Status</th>
+            <th>Payslip</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in payrolls %}
+          <tr>
+            <td>{{ p.employee }}</td>
+            <td>{{ p.month }}</td>
+            <td>{{ p.basic_salary }}</td>
+            
+            <td>{{ p.net_salary }}</td>
+            <td>
+              {% if p.status == "Paid" %}
+                <span class="badge badge-paid">Paid</span>
+              {% else %}
+                <span class="badge badge-unpaid">Unpaid</span>
+              {% endif %}
+            </td>
+            <td class="d-flex gap-1 flex-wrap">
+              <a href="{% url 'payroll_view' p.id %}" class="btn btn-accent btn-sm"><i class="bi bi-eye"></i> View</a>
+              <a href="{% url 'payroll_edit' p.id %}" class="btn btn-warning btn-sm"><i class="bi bi-pencil-square"></i> Edit</a>
+              {% if p.payslip_pdf %}
+                <a href="{{ p.payslip_pdf.url }}" target="_blank" class="btn btn-success btn-sm"><i class="bi bi-download"></i> Download Payslip</a>
+              {% else %}
+                <a href="{% url 'generate_payslip' p.id %}" class="btn btn-accent btn-sm"><i class="bi bi-file-earmark-pdf"></i> Generate Payslip</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8" class="text-center text-muted">No payroll records found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+{% endblock %}

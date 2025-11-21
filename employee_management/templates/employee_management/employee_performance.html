@@ -1,0 +1,276 @@
+{% extends "employee_management/employee_dashboard1.html" %}
+
+{% block title %}Performance - {{ employee.name }}{% endblock %}
+
+{% block content %}
+<div class="content"></div>
+<h2 class="fw-bold mb-3 text-primary">Performance Reviews for {{ employee.name }}</h2>
+
+<!-- 🔹 Chart Section -->
+<div class="row mb-3">
+  <div class="col-md-4 d-flex justify-content-center">
+    <div class="card p-2 shadow-sm kpi-card text-center">
+      <h6 class="fw-bold mb-2">Quarterly Overview</h6>
+      <div class="chart-container" style="height:215px;">
+        <canvas id="quarterlyChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8 d-flex justify-content-center">
+    <div class="card p-2 shadow-sm kpi-card text-center">
+      <h6 class="fw-bold mb-2">KPI Performance by Quarter</h6>
+      <div class="chart-container">
+        <canvas id="kpiQuarterChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 🔹 Radar + Last Review Side by Side -->
+<div class="row mb-3">
+  <div class="col-md-6 d-flex justify-content-center">
+    <div class="card p-2 shadow-sm kpi-card text-center">
+      <h6 class="fw-bold mb-2">KPI vs Defined Max Score</h6>
+      <div class="chart-container">
+        <canvas id="kpiRadarChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  {% if reviews %}
+  <div class="col-md-6 d-flex justify-content-center">
+    <div class="review-card w-100 kpi-card text-center">
+      <div class="review-header justify-content-center">
+        <div>
+          <div class="review-period">{{ reviews.last.review_period }}</div>
+          <div class="review-by">Reviewed by: {{ reviews.last.reviewed_by }}</div>
+        </div>
+        <div>
+          {% if reviews.last.average_score >= 7 %}
+            <span class="score-badge score-high">{{ reviews.last.average_score }}</span>
+          {% elif reviews.last.average_score >= 4 %}
+            <span class="score-badge score-medium">{{ reviews.last.average_score }}</span>
+          {% else %}
+            <span class="score-badge score-low">{{ reviews.last.average_score }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="feedback">
+        "{{ reviews.last.feedback|default:"No feedback provided." }}"
+      </div>
+      <ul class="kpi-list">
+        {% for score in reviews.last.scores.all %}
+          <li>{{ score.kpi.name }}: <b>{{ score.score }}</b></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+/* 🔹 KPI Cards uniform size and centering */
+.kpi-card {
+  background: #fff;
+  border-radius: 8px;
+  min-height: 230px;
+  max-height: 260px;
+  width: 100%;
+  max-width: 100%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.chart-container {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* 🔹 Review Card Styling */
+.review-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  align-items: center;
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  width: 100%;
+}
+
+.review-period {
+  font-weight: bold;
+  color: #007bff;
+  text-align: center;
+}
+
+.review-by {
+  font-size: 0.85rem;
+  color: #6c757d;
+  text-align: center;
+}
+
+.score-badge {
+  padding: 5px 10px;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+.score-high { background-color: #28a745; }
+.score-medium { background-color: #ffc107; }
+.score-low { background-color: #dc3545; }
+
+.feedback {
+  flex: 0 0 auto;
+  font-style: italic;
+  color: #444;
+  margin-bottom: 8px;
+  max-height: 50px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.kpi-list {
+  flex: 1 1 auto;
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+  overflow-y: auto;
+  max-height: 100px;
+  font-size: 0.9rem;
+  width: 100%;
+  text-align: left;
+}
+.kpi-list li {
+  padding: 2px 0;
+}
+
+.content {
+    margin-left: 240px;
+    padding: 30px 30px 30px;
+}
+</style>
+
+<!-- 🔹 Remaining Review Cards -->
+<div class="row g-2">
+  {% if reviews|length > 1 %}
+    {% for review in reviews|slice:":-1" %}
+    <div class="col-md-6 d-flex justify-content-center">
+      <div class="review-card w-100 kpi-card text-center">
+        <div class="review-header justify-content-center">
+          <div>
+            <div class="review-period">{{ review.review_period }}</div>
+            <div class="review-by">Reviewed by: {{ review.reviewed_by }}</div>
+          </div>
+          <div>
+            {% if review.average_score >= 7 %}
+              <span class="score-badge score-high">{{ review.average_score }}</span>
+            {% elif review.average_score >= 4 %}
+              <span class="score-badge score-medium">{{ review.average_score }}</span>
+            {% else %}
+              <span class="score-badge score-low">{{ review.average_score }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="feedback">
+          "{{ review.feedback|default:"No feedback provided." }}"
+        </div>
+        <ul class="kpi-list">
+          {% for score in review.scores.all %}
+            <li>{{ score.kpi.name }}: <b>{{ score.score }}</b></li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="col-12 text-center text-muted">
+      Only 1 review available (already shown above).
+    </div>
+  {% endif %}
+</div>
+
+<!-- 🔹 Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // Pie Chart - Quarterly
+  new Chart(document.getElementById("quarterlyChart"), {
+    type: "pie",
+    data: {
+      labels: ["Q1", "Q2", "Q3", "Q4"],
+      datasets: [{
+        data: [
+          {{ quarter_scores.Q1 }},
+          {{ quarter_scores.Q2 }},
+          {{ quarter_scores.Q3 }},
+          {{ quarter_scores.Q4 }}
+        ],
+        backgroundColor: ["#007bff", "#28a745", "#ffc107", "#dc3545"]
+      }]
+    },
+    options: { 
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { 
+        legend: { 
+          position: "bottom",
+          labels: {
+            font: { size: 10 }  // smaller font to fit inside card
+          }
+        } 
+      } 
+    }
+  });
+
+  // Bar Chart - KPI per Quarter
+  const kpiQuarterData = {{ kpi_quarter_data|safe }};
+  const kpiLabels = [...new Set(Object.values(kpiQuarterData).flatMap(obj => Object.keys(obj)))];
+  const datasets = Object.keys(kpiQuarterData).map((q, i) => ({
+    label: q,
+    data: kpiLabels.map(kpi => kpiQuarterData[q][kpi] || 0),
+    backgroundColor: ["#007bff", "#28a745", "#ffc107", "#dc3545"][i]
+  }));
+
+  new Chart(document.getElementById("kpiQuarterChart"), {
+    type: "bar",
+    data: { labels: kpiLabels, datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "top", labels: { font: { size: 10 } } } },
+      scales: { y: { beginAtZero: true, max: 10 } }
+    }
+  });
+
+  // Radar Chart - KPI vs Max Score
+  new Chart(document.getElementById("kpiRadarChart"), {
+    type: "radar",
+    data: {
+      labels: {{ kpi_labels|safe }},
+      datasets: [
+        { label: "Actual Avg", data: {{ kpi_actual|safe }}, fill: true, backgroundColor: "rgba(0,123,255,0.3)", borderColor: "#007bff" },
+        { label: "Max Score", data: {{ kpi_max|safe }}, fill: false, borderColor: "#dc3545", borderDash: [5,5] }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true } } }
+  });
+</script>
+{% endblock %}

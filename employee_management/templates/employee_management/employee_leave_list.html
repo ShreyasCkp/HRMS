@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    body {
+        background-color: var(--body-bg);
+        font-family: 'Inter', sans-serif;
+        color: var(--text-dark);
+    }
+    .container {
+        margin: 20px auto;
+        padding: 30px;
+        max-width: 1100px;
+        background: var(--card-bg);
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        box-sizing: border-box;
+    }
+    .header-flex {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 20px;
+        position: relative;
+    }
+    .header-flex h2 {
+        font-weight: 700;
+        color: var(--text-dark);
+        font-size: 1.3rem;
+        margin: 0;
+        flex-grow: 1;
+        text-align: center;
+    }
+    .search-input {
+        position: absolute;
+        left: 0;
+        padding: 6px 10px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+        width: 240px;
+    }
+    table {
+        width: 100%;
+        font-size: 13px;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+    th, td {
+        vertical-align: middle !important;
+        text-align: center;
+        padding: 8px;
+        border: 1px solid #dee2e6;
+    }
+    thead {
+        background: linear-gradient(135deg, var(--accent-btn), var(--accent-btn-hover));
+        color: white;
+    }
+    tr:nth-child(even) {
+        background-color: #f8f9fa;
+    }
+    td:hover {
+        background-color: #eff3f5;
+    }
+    .btn-action {
+        font-size: 13px;
+        padding: 5px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: background-color 0.3s;
+        text-decoration: none;
+        border: none;
+        display: inline-block;
+    }
+    .btn-approve {
+        background-color: #28a745;
+        color: white;
+    }
+    .btn-approve:hover {
+        background-color: #218838;
+    }
+    .btn-reject {
+        background-color: #dc3545;
+        color: white;
+    }
+    .btn-reject:hover {
+        background-color: #b02a37;
+    }
+    /* Modal styles */
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+        z-index: 1000;
+    }
+    .modal-content {
+        background-color: white;
+        margin: 15% auto;
+        padding: 20px;
+        border-radius: 8px;
+        width: 80%;
+        max-width: 500px;
+    }
+    .modal-content input {
+        width: 100%;
+        padding: 8px;
+        margin: 10px 0;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+    .modal-content button {
+        padding: 8px 16px;
+        margin: 5px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .modal-content .btn-submit {
+        background-color: #007bff;
+        color: white;
+    }
+    .modal-content .btn-cancel {
+        background-color: #6c757d;
+        color: white;
+    }
+</style>
+<div class="container mt-4">
+    <div class="header-flex">
+        <input type="text" id="leaveSearch" class="search-input" placeholder="Search Leaves...">
+        <h2>Employee Leave List</h2>
+    </div>
+    <table class="table table-bordered table-striped table-hover mt-3">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <!-- <th>Leave Type</th> -->
+                <th>Start</th>
+                <th>End</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Approved By</th>
+                <th>Admin Reason</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for leave in leaves %}
+            <tr data-leave-id="{{ leave.id }}">
+                <td>{{ leave.employee.name }}</td>
+<td>
+  {% if leave.leave_type_id and leave_type_dict|default:{} %}
+    {{ leave_type_dict|dict_get:leave.leave_type_id|default:"(ID: " ~ leave.leave_type_id ~ ")" }}
+  {% else %}
+    <span class="text-muted fst-italic">Not Set</span>
+  {% endif %}
+</td>
+
+
+
+                <td>{{ leave.start_date }}</td>
+                <td>{{ leave.end_date }}</td>
+                <td>{{ leave.reason }}</td>
+                <td>
+                    {% if leave.is_approved %}
+                        ✅ Approved
+                    {% elif leave.approved_by %}
+                        ❌ Rejected
+                    {% else %}
+                        ⏳ Pending
+                    {% endif %}
+                </td>
+                <td>{{ leave.approved_by|default:"-" }}</td>
+                <td>{{ leave.admin_reason|default:"-" }}</td>
+                <td>
+                    {% if not leave.approved_by %}
+                        <button type="button" class="btn-action btn-approve" onclick="openModal('approve', '{{ leave.id }}')">Approve</button>
+                        <button type="button" class="btn-action btn-reject" onclick="openModal('reject', '{{ leave.id }}')">Reject</button>
+                    {% else %}
+                        <span class="text-muted">Action Taken</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="9" class="text-center text-muted">No leave requests found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<!-- Modal for entering admin reason -->
+<div id="reasonModal" class="modal">
+    <div class="modal-content">
+        <h3 id="modalTitle"></h3>
+        <input type="text" id="adminReason" placeholder="Enter reason (optional)">
+        <button type="button" class="btn-submit" onclick="submitAction()">OK</button>
+        <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
+    </div>
+</div>
+<script>
+    let currentAction = '';
+    let currentLeaveId = '';
+
+    function openModal(action, leaveId) {
+        currentAction = action;
+        currentLeaveId = leaveId;
+        const modal = document.getElementById('reasonModal');
+        const modalTitle = document.getElementById('modalTitle');
+        modalTitle.textContent = action === 'approve' ? 'Approve Leave' : 'Reject Leave';
+        document.getElementById('adminReason').value = '';
+        modal.style.display = 'block';
+    }
+
+    function closeModal() {
+        document.getElementById('reasonModal').style.display = 'none';
+    }
+
+    function submitAction() {
+        const adminReason = document.getElementById('adminReason').value;
+        const url = currentAction === 'approve'
+            ? `{% url 'leave_approve' 0 %}`.replace('0', currentLeaveId)
+            : `{% url 'leave_reject' 0 %}`.replace('0', currentLeaveId);
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ admin_reason: adminReason }),
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Request failed');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === 'success') {
+                const leaveRow = document.querySelector(`tr[data-leave-id="${currentLeaveId}"]`);
+                if (leaveRow) {
+                    const statusCell = leaveRow.querySelector('td:nth-child(6)');
+                    const approverCell = leaveRow.querySelector('td:nth-child(7)');
+                    const adminReasonCell = leaveRow.querySelector('td:nth-child(8)');
+                    const actionsCell = leaveRow.querySelector('td:nth-child(9)');
+                    statusCell.innerHTML = currentAction === 'approve' ? '✅ Approved' : '❌ Rejected';
+                    approverCell.innerHTML = '{{ request.user.username|default:"-" }}';
+                    adminReasonCell.innerHTML = adminReason || '-';
+                    actionsCell.innerHTML = '<span class="text-muted">Action Taken</span>';
+                }
+                closeModal();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    }
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+</script>
+{% endblock %}

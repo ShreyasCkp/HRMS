@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Masters Dashboard{% endblock %}
+{% block content %}
+<h2>Masters Dashboard</h2>
+<ul>
+  <li><a href="{% url 'department_list' %}">Departments</a></li>
+  <li><a href="{% url 'jobrole_list' %}">Job Roles</a></li>
+  <li><a href="{% url 'leavetype_list' %}">Leave Types</a></li>
+  <li><a href="{% url 'kpi_list' %}">Performance KPIs</a></li>
+  <li><a href="{% url 'interviewround_list' %}">Interview Rounds</a></li>
+</ul>
+{% endblock %}

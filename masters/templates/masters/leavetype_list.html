@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% block title %}Leave Types | SmartHR ERP{% endblock %}
+
+{% block page_title %}
+<h2 class="fw-bold">Leave Types</h2>
+{% endblock %}
+
+{% block content %}
+<style>
+  :root { --accent-btn:#3caea3; --accent-btn-hover:#2f8886; }
+  .btn-accent{background-color:var(--accent-btn)!important;color:#fff!important;border-radius:6px;}
+  .btn-accent:hover{background-color:var(--accent-btn-hover)!important;}
+  .icon-btn{border:none;background:none;padding:4px 8px;border-radius:6px;transition:.2s;}
+  .icon-btn i{font-size:1.2rem;}
+  .icon-view{color:#0d6efd;}
+  .icon-edit{color:#ffc107;}
+  .icon-delete{color:#dc3545;}
+  .icon-btn:hover{background-color:rgba(0,0,0,0.05);}
+  /* Simple modal styling */
+  .modal-content{border-radius:12px;padding:1rem;box-shadow:0 4px 12px rgba(0,0,0,0.1);}
+  .modal-header{border-bottom:none;padding-bottom:0;}
+  .modal-title{font-weight:600;font-size:1.2rem;}
+  .modal-footer{border-top:none;}
+</style>
+
+<div class="container mt-4">
+  <div class="bg-white shadow rounded p-4">
+    <div class="mb-3 text-start">
+      <a href="{% url 'leavetype_create' %}" class="btn btn-accent">
+        <i class="bi bi-plus-circle"></i> Add Leave Type
+      </a>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Default Balance</th>
+            <th class="text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in leavetypes %}
+          <tr>
+            <td>{{ t.name }}</td>
+            <td>{{ t.description }}</td>
+            <td>{{ t.default_balance }}</td>
+            <td class="text-center">
+              <a href="{% url 'leavetype_view' t.id %}" class="icon-btn icon-view" title="View">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="{% url 'leavetype_edit' t.id %}" class="icon-btn icon-edit" title="Edit">
+                <i class="bi bi-pencil-square"></i>
+              </a>
+              <button type="button" class="icon-btn icon-delete" data-bs-toggle="modal"
+                      data-bs-target="#deleteModal" data-id="{{ t.id }}" data-name="{{ t.name }}"
+                      title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-center text-muted">No leave types found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" id="deleteForm">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">Delete Leave Type</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body text-center">
+          Are you sure you want to delete <strong id="leaveName"></strong>?
+        </div>
+        <div class="modal-footer justify-content-center">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Delete</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const modal = document.getElementById('deleteModal');
+  modal.addEventListener('show.bs.modal', event => {
+    const btn = event.relatedTarget;
+    const id = btn.getAttribute('data-id');
+    const name = btn.getAttribute('data-name');
+    document.getElementById('leaveName').textContent = name;
+    document.getElementById('deleteForm').action = `/masters/leavetypes/delete/${id}/`;
+  });
+});
+</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+{% endblock %}

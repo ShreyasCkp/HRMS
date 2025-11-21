@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+
+{% block title %}Performance KPIs | SmartHR ERP{% endblock %}
+
+{% block page_title %}
+<h2 class="fw-bold">Performance KPIs</h2>
+{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --accent-btn: #3caea3;
+    --accent-btn-hover: #2f8886;
+  }
+
+  .btn-accent {
+    background-color: var(--accent-btn) !important;
+    color: #fff !important;
+    border-radius: 6px;
+    padding: 5px 12px;
+  }
+  .btn-accent:hover { background-color: var(--accent-btn-hover) !important; }
+
+  /* ✅ Icon button styling */
+  .icon-btn {
+    border: none;
+    background: none;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: 0.2s;
+  }
+  .icon-btn i { font-size: 1.2rem; }
+  .icon-view   { color: #0d6efd; }
+  .icon-edit   { color: #ffc107; }
+  .icon-delete { color: #dc3545; }
+  .icon-btn:hover { background-color: rgba(0,0,0,0.05); }
+
+  /* Table styling */
+  table.table th {
+    background-color: #f1f3f5;
+    font-weight: 600;
+  }
+  table.table td { vertical-align: middle; }
+
+  /* ✅ Simple Modal Styling */
+  .modal-content {
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .modal-header { border-bottom: none; padding-bottom: 0; }
+  .modal-title { font-weight: 600; font-size: 1.2rem; }
+  .modal-footer { border-top: none; }
+</style>
+
+<div class="container mt-4">
+  <div class="bg-white shadow rounded p-4">
+
+    <div class="mb-3 text-start">
+      <a href="{% url 'kpi_create' %}" class="btn btn-accent">
+        <i class="bi bi-plus-circle"></i> Add KPI
+      </a>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Max Score</th>
+            <th>Goal Threshold</th>
+            <th>Review Freq. (days)</th>
+            <th class="text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for k in kpis %}
+          <tr>
+            <td>{{ k.name }}</td>
+            <td>{{ k.description|default:"-" }}</td>
+            <td>{{ k.max_score }}</td>
+            <td>{{ k.goal_threshold }}</td>
+            <td>{{ k.review_frequency_days }}</td>
+            <td class="text-center">
+              <a href="{% url 'kpi_view' k.pk %}" class="icon-btn icon-view" title="View">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="{% url 'kpi_edit' k.pk %}" class="icon-btn icon-edit" title="Edit">
+                <i class="bi bi-pencil-square"></i>
+              </a>
+              <button type="button"
+                      class="icon-btn icon-delete"
+                      data-bs-toggle="modal"
+                      data-bs-target="#deleteModal"
+                      data-url="{% url 'kpi_delete' k.pk %}"
+                      data-name="{{ k.name }}"
+                      title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted">No KPIs defined yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p class="mb-0">Are you sure you want to delete <strong id="deleteItemName"></strong>?</p>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <a id="confirmDeleteBtn" href="#" class="btn btn-danger">Delete</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Update delete modal dynamically
+  const deleteModal = document.getElementById('deleteModal');
+  deleteModal.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
+    const url = button.getAttribute('data-url');
+    const name = button.getAttribute('data-name');
+
+    document.getElementById('deleteItemName').textContent = name;
+    document.getElementById('confirmDeleteBtn').setAttribute('href', url);
+  });
+</script>
+{% endblock %}

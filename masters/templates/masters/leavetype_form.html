@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+
+{% block title %}
+  {% if view_mode %}View Leave Type | SmartHR ERP{% else %}Add / Edit Leave Type | SmartHR ERP{% endif %}
+{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;
+    --accent-btn-hover: #2f8886;
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+    --border-light: #d1d5db;
+  }
+
+  body {
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* ✅ Card container */
+  .form-card {
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    background: var(--card-bg);
+    padding: 2rem;
+  }
+
+  label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: block;
+    color: var(--text-dark);
+  }
+
+  input, select, textarea {
+    width: 100% !important;
+    height: 45px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    font-size: 14px;
+    background-color: #fff;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  textarea { height: auto; min-height: 100px; }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent-btn);
+    box-shadow: 0 0 0 3px rgba(60, 174, 163, 0.2);
+    outline: none;
+  }
+
+  .form-group { margin-bottom: 18px; }
+
+  .btn-accent {
+    background-color: var(--accent-btn) !important;
+    color: #fff !important;
+    font-weight: 600;
+    min-width: 140px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover) !important;
+  }
+
+  .btn-secondary {
+    min-width: 140px;
+    border-radius: 8px;
+  }
+
+  .form-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: var(--text-dark);
+  }
+</style>
+
+<div class="container mt-5" style="max-width: 650px;">
+  <h2 class="form-title">
+    {% if view_mode %}View Leave Type{% else %}Edit Leave Type{% endif %}
+  </h2>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" class="form-card">
+    {% csrf_token %}
+
+    <div class="form-group">
+      {{ form.name.label_tag }}
+      {{ form.name }}
+      {% if form.name.errors %}
+        <div class="text-danger small">{{ form.name.errors }}</div>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      {{ form.description.label_tag }}
+      {{ form.description }}
+      {% if form.description.errors %}
+        <div class="text-danger small">{{ form.description.errors }}</div>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      {{ form.default_balance.label_tag }}
+      {{ form.default_balance }}
+      {% if form.default_balance.errors %}
+        <div class="text-danger small">{{ form.default_balance.errors }}</div>
+      {% endif %}
+    </div>
+
+    <div class="mt-4 d-flex justify-content-center gap-2">
+      {% if not view_mode %}
+        <button type="submit" class="btn btn-accent">Save</button>
+        <a href="{% url 'leavetype_list' %}" class="btn btn-secondary">Cancel</a>
+      {% else %}
+        <a href="{% url 'leavetype_list' %}" class="btn btn-secondary">cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+{% if view_mode %}
+<!-- ✅ Make fields read-only in view mode -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    document.querySelectorAll("form input, form textarea, form select").forEach(el => {
+      el.setAttribute("disabled", "disabled");
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

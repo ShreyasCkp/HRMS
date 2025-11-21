@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  :root {
+    --sidebar-bg: #2f3e46;
+    --sidebar-color: #ffffff;
+    --sidebar-hover: #124e51;
+    --active-bg: #52796f;
+    --accent-btn: #3caea3;       /* ✅ Accent color */
+    --accent-btn-hover: #2f8886; /* ✅ Hover color */
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+    --border-light: #d1d5db;
+  }
+
+  body {
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* ✅ Form Card */
+  form.card {
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    background: var(--card-bg);
+    padding: 2rem;
+  }
+
+  /* ✅ Labels */
+  form label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: block;
+    color: var(--text-dark);
+  }
+
+  /* ✅ Input Fields */
+  form input,
+  form select,
+  form textarea {
+    width: 100% !important;
+    height: 45px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    font-size: 14px;
+    background-color: #fff;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  /* Focus effect */
+  form input:focus,
+  form select:focus,
+  form textarea:focus {
+    border-color: var(--accent-btn);
+    box-shadow: 0 0 0 3px rgba(60, 174, 163, 0.2);
+    outline: none;
+  }
+
+  /* ✅ Textarea bigger */
+  form textarea {
+    height: 120px !important;
+    resize: vertical;
+  }
+
+  /* ✅ Spacing */
+  .form-group {
+    margin-bottom: 18px;
+  }
+
+  /* ✅ Buttons */
+  .btn-accent {
+    background-color: var(--accent-btn) !important;
+    color: #fff !important;
+    font-weight: 600;
+    min-width: 200px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover) !important;
+  }
+
+  .btn-secondary {
+    min-width: 200px;
+    border-radius: 8px;
+  }
+
+  /* ✅ Heading */
+  .form-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: var(--text-dark);
+  }
+</style>
+
+<!-- Container with reduced width -->
+<div class="container mt-4" style="max-width: 750px;">
+  <h2 class="form-title">
+    {% if applicant and view_only %}
+      View Application - {{ applicant.name }}
+    {% elif applicant %}
+      Edit Application - {{ applicant.name }}
+    {% else %}
+      Application for {{ job.title }}
+    {% endif %}
+  </h2>
+
+  <form method="post" enctype="multipart/form-data" class="card">
+    {% csrf_token %}
+
+    <!-- Personal Info -->
+    <div class="form-group">
+      {{ form.name.label_tag }}
+      {{ form.name }}
+    </div>
+    <div class="form-group">
+      {{ form.email.label_tag }}
+      {{ form.email }}
+    </div>
+    <div class="form-group">
+      {{ form.phone.label_tag }}
+      {{ form.phone }}
+    </div>
+    <div class="form-group">
+      {{ form.gender.label_tag }}
+      {{ form.gender }}
+    </div>
+    <div class="form-group">
+      {{ form.location.label_tag }}
+      {{ form.location }}
+    </div>
+
+    <!-- Skills & Resume -->
+    <div class="form-group">
+      {{ form.skills.label_tag }}
+      {{ form.skills }}
+    </div>
+    <div class="form-group">
+      {{ form.resume.label_tag }}
+      {{ form.resume }}
+    </div>
+    <div class="form-group">
+      {{ form.experience.label_tag }}
+      {{ form.experience }}
+    </div>
+
+    <!-- Extra Info -->
+    <div class="form-group">
+      {{ form.linkedin_url.label_tag }}
+      {{ form.linkedin_url }}
+    </div>
+    <div class="form-group">
+      {{ form.github_url.label_tag }}
+      {{ form.github_url }}
+    </div>
+    <div class="form-group">
+      {{ form.current_ctc.label_tag }}
+      {{ form.current_ctc }}
+    </div>
+    <div class="form-group">
+      {{ form.expected_ctc.label_tag }}
+      {{ form.expected_ctc }}
+    </div>
+    <div class="form-group">
+      {{ form.notice_period.label_tag }}
+      {{ form.notice_period }}
+    </div>
+
+    <!-- Cover Letter -->
+    <div class="form-group">
+      {{ form.cover_letter.label_tag }}
+      {{ form.cover_letter }}
+    </div>
+
+    <!-- Status (only if applicant exists) -->
+    {% if applicant %}
+    <div class="form-group">
+      {{ form.status.label_tag }}
+      {{ form.status }}
+    </div>
+    {% endif %}
+
+    {% if not view_only %}
+    <div class="text-center mt-4">
+      <button type="submit" class="btn btn-accent">
+        {% if applicant %} Update Application {% else %} Submit Application {% endif %}
+      </button>
+    </div>
+    {% endif %}
+
+    {% if applicant and view_only %}
+    <div class="text-center mt-4">
+      <a href="{% url 'recruitment_dashboard' %}" class="btn btn-secondary">
+        Back to Dashboard
+      </a>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+{% if view_only %}
+<script>
+  // Disable all fields for view-only mode
+  document.addEventListener("DOMContentLoaded", function() {
+    document.querySelectorAll("form input, form select, form textarea")
+      .forEach(field => field.disabled = true);
+  });
+</script>
+{% endif %}
+{% endblock %}

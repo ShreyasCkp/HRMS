@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+{% block title %}Payroll | SmartHR ERP{% endblock %}
+
+{% block page_title %}
+<h2 class="fw-bold">Payroll</h2>
+{% endblock %}
+
+{% block top_actions %}
+
+<a href="/payroll/process/" class="btn quick-action-btn">
+  <i class="bi bi-cash-coin"></i> Process Payroll
+</a>
+{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --accent-btn: #3caea3;
+    --accent-btn-hover: #2f8886;
+    --body-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--body-bg);
+    color: var(--text-dark);
+  }
+
+  /* KPI Cards */
+  .kpi-card {
+    background-color: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s;
+    padding: 1.2rem;
+    text-align: center;
+    min-height: 140px;
+  }
+  .kpi-card:hover {
+    transform: translateY(-3px);
+  }
+
+  /* Quick Action Buttons */
+  .quick-action-btn {
+    background-color: var(--accent-btn);
+    color: #fff;
+    margin: 6px 8px 6px 0;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.9rem;
+    text-decoration: none;
+    transition: background-color 0.2s;
+  }
+  .quick-action-btn:hover {
+    background-color: var(--accent-btn-hover);
+  }
+
+  /* Table Styling */
+  table.table th {
+    background-color: #f1f3f5;
+    font-weight: 600;
+  }
+
+  table.table-hover tbody tr:hover {
+    background-color: #e9f5f4;
+    transform: translateY(-2px);
+    transition: all 0.2s ease;
+  }
+
+  /* Card Styling */
+  .card-custom {
+    background-color: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    padding: 1.2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .btn-accent {
+    background-color: var(--accent-btn);
+    color: #fff;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+    border: none;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-btn-hover);
+    color: #fff;
+  }
+
+  /* Small KPI Card for Deduction / Quick Actions */
+  .small-kpi-card {
+    background-color: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    padding: 1rem;
+    text-align: center;
+    min-height: 200px;
+  }
+
+  .small-kpi-card h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+  }
+
+  .deduction-item {
+    font-size: 0.9rem;
+    margin-bottom: 0.3rem;
+  }
+
+  @media (min-width: 768px) {
+    .side-by-side-cards {
+      display: flex;
+      gap: 1rem;
+    }
+    .side-by-side-cards > .small-kpi-card {
+      flex: 1;
+    }
+  }
+</style>
+
+<!-- KPI Cards -->
+<div class="row g-4 mb-4">
+  <div class="col-md-3">
+    <a href="{% url 'payroll_list' %}?status=Paid" class="text-decoration-none">
+      <div class="kpi-card">
+        <div class="fs-2 text-primary"><i class="bi bi-cash-stack"></i></div>
+        <div class="fw-bold fs-4">{{ total_processed }}</div>
+        <div class="text-muted">Payroll Processed</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="{% url 'payroll_list' %}?status=Unpaid" class="text-decoration-none">
+      <div class="kpi-card">
+        <div class="fs-2 text-warning"><i class="bi bi-hourglass-split"></i></div>
+        <div class="fw-bold fs-4">{{ total_pending }}</div>
+        <div class="text-muted">Pending (Count)</div>
+        <div class="fw-bold fs-6 text-danger">₹ {{ pending_amount|floatformat:2 }}</div>
+        <div class="text-muted">Pending Amount</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <div class="kpi-card">
+      <div class="fs-2 text-success"><i class="bi bi-graph-up"></i></div>
+      <div class="fw-bold fs-4">₹ {{ avg_salary|floatformat:2 }}</div>
+      <div class="text-muted">Avg Salary</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="kpi-card">
+      <div class="fs-2 text-dark"><i class="bi bi-wallet2"></i></div>
+      <div class="fw-bold fs-4">₹ {{ total_payroll|floatformat:2 }}</div>
+      <div class="text-muted">Total Payroll ({{ month_name }})</div>
+    </div>
+  </div>
+</div>
+
+<!-- Payroll Table -->
+<div class="card-custom">
+  <div class="fw-bold mb-3">Payroll List ({{ month_name }})</div>
+  <div class="table-responsive">
+    <table class="table table-hover table-bordered align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Employee</th>
+          <th>Basic Salary</th>
+         
+          <th>Net Salary</th>
+          <th>Status</th>
+          <!-- <th>Actions</th> -->
+        </tr>
+      </thead>
+      <tbody>
+        {% for payroll in payrolls %}
+        <tr>
+          <td>{{ payroll.employee }}</td>
+          <td>{{ payroll.basic_salary }}</td>
+          
+          <td>{{ payroll.net_salary }}</td>
+          <td>
+            <span class="badge {% if payroll.status == 'Paid' %}bg-success{% else %}bg-warning text-dark{% endif %}">
+              {{ payroll.status }}
+            </span>
+          </td>
+          <!-- <td class="d-flex gap-1">
+            <a href="/payroll/{{ payroll.id }}/view/" class="btn-accent btn btn-sm">View</a>
+            <a href="/payroll/{{ payroll.id }}/edit/" class="btn-accent btn btn-sm">Edit</a>
+          </td> -->
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8" class="text-center text-muted">No payroll records found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Deduction Breakdown & Quick Actions Side by Side -->
+<div class="side-by-side-cards mb-4">
+  <!-- Deduction Breakdown -->
+  <div class="small-kpi-card">
+    <h5>Deduction Breakdown</h5>
+    <div class="deduction-item">Income Tax: ₹ {{ deduction_breakdown.income_tax }}</div>
+    <div class="deduction-item">Health Insurance: ₹ {{ deduction_breakdown.health_insurance }}</div>
+    <div class="deduction-item">Retirement Fund: ₹ {{ deduction_breakdown.retirement_fund }}</div>
+    <div class="deduction-item">Social Security: ₹ {{ deduction_breakdown.social_security }}</div>
+    <div class="deduction-item">Other: ₹ {{ deduction_breakdown.other }}</div>
+  </div>
+
+  
+</div>
+{% endblock %}

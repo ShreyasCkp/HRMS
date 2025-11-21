@@ -1,0 +1,181 @@
+{% extends "employee_management/employee_dashboard1.html" %}
+{% block title %}Mark Attendance{% endblock %}
+
+{% block content %}
+<style>
+    .attendance-form-container {
+        max-width: 600px;
+        margin: 2rem auto;
+        background-color: var(--card-bg);
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .attendance-form-container h2 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        text-align: center;
+        color: var(--text-dark);
+        margin-bottom: 1rem;
+    }
+
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    label {
+        font-weight: 500;
+        margin-bottom: 0.3rem;
+        display: inline-block;
+        color: var(--text-dark);
+    }
+
+    input[type="text"],
+    input[type="time"],
+    input[type="date"],
+    input[type="checkbox"] {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        font-size: 0.95rem;
+    }
+
+    input[readonly] {
+        background-color: #f5f5f5;
+        cursor: not-allowed;
+    }
+
+    .form-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .form-check input[type="checkbox"] {
+        width: auto;
+    }
+
+    .btn-submit {
+        background: var(--accent-btn);
+        color: #fff;
+        border: none;
+        padding: 10px 20px;
+        font-weight: 500;
+        font-size: 0.95rem;
+        border-radius: 6px;
+        transition: background 0.3s ease;
+        width: 100%;
+        margin-top: 1rem;
+    }
+
+    .btn-submit:hover {
+        background: var(--accent-btn-hover);
+    }
+
+    .text-danger {
+        color: #dc3545;
+        font-size: 0.85rem;
+        margin-top: 0.2rem;
+    }
+
+    .employee-name {
+        text-align: center;
+        font-weight: 500;
+        color: #555;
+        margin-bottom: 1.5rem;
+    }
+</style>
+
+<div class="attendance-form-container">
+    <h2>Mark Your Attendance</h2>
+    <p class="employee-name"><strong>Employee:</strong> {{ employee.name }}</p>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.employee }}
+
+        <div class="form-group">
+            {{ form.date.label_tag }}{{ form.date }}
+            {% for err in form.date.errors %}<div class="text-danger">{{ err }}</div>{% endfor %}
+        </div>
+
+        <!-- Clock-in field -->
+        <div class="form-group">
+            {{ form.clock_in.label_tag }}
+            <input id="id_clock_in" type="time" name="clock_in" readonly>
+            {% for error in form.clock_in.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        </div>
+
+        <!-- Clock-out field -->
+        <div class="form-group">
+            {{ form.clock_out.label_tag }}
+            <input id="id_clock_out" type="time" name="clock_out" readonly>
+            {% for error in form.clock_out.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        </div>
+
+        <div class="form-group form-check">
+            {{ form.early_exit }}{{ form.early_exit.label_tag }}
+            {% for err in form.early_exit.errors %}<div class="text-danger">{{ err }}</div>{% endfor %}
+        </div>
+
+        <button type="submit" id="submitBtn" class="btn-submit">Submit Attendance</button>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const clockInField = document.getElementById('id_clock_in');
+  const clockOutField = document.getElementById('id_clock_out');
+  const dateField = document.getElementById('id_date');
+  const submitBtn = document.getElementById('submitBtn');
+
+  function currentTime() {
+    const now = new Date();
+    return now.toTimeString().slice(0, 5);
+  }
+
+  if (dateField && !dateField.value) {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    dateField.value = `${yyyy}-${mm}-${dd}`;
+  }
+  if (dateField) dateField.readOnly = true;
+
+  const employeeId = "{{ employee.id }}";
+
+  if (employeeId) {
+    fetch("{% url 'get_today_attendance' %}?employee_id=" + employeeId)
+      .then(res => res.json())
+      .then(data => {
+        const now = currentTime();
+
+        if (!data.clock_in) {
+          clockInField.value = now;
+          submitBtn.textContent = "Check In";  // ✅ Update label
+        } else if (!data.clock_out) {
+          clockInField.value = data.clock_in;
+          clockOutField.value = now;
+          submitBtn.textContent = "Check Out";  // ✅ Update label
+        } else {
+          clockInField.value = data.clock_in;
+          clockOutField.value = data.clock_out;
+          submitBtn.textContent = "Update Attendance";  // Optional fallback
+        }
+      })
+      .catch(err => {
+        console.error("Fetch error:", err);
+        submitBtn.textContent = "Check In";  // Fallback
+      });
+  }
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Job Role{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --accent-btn:#3caea3; --accent-btn-hover:#2f8886;
+  }
+  .form-card{border-radius:12px;background:#fff;padding:2rem;box-shadow:0 4px 12px rgba(0,0,0,0.08);}
+  .btn-accent{background-color:var(--accent-btn)!important;color:#fff!important;border-radius:8px;}
+  .btn-accent:hover{background-color:var(--accent-btn-hover)!important;}
+  label{font-weight:600;margin-bottom:6px;display:block;}
+  input,textarea{width:100%!important;padding:10px;border:1px solid #d1d5db;border-radius:8px;}
+</style>
+
+<div class="container mt-5" style="max-width:650px;">
+  <h2 class="mb-4 text-center">
+    {% if view_mode %}View Job Role{% elif form.instance.pk %}Edit Job Role{% else %}Add Job Role{% endif %}
+  </h2>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" class="form-card">
+    {% csrf_token %}
+    {% for field in form %}
+      <div class="mb-3">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.errors %}
+          <div class="text-danger small">{{ field.errors }}</div>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    <div class="mt-4 d-flex justify-content-center gap-2">
+      {% if view_mode %}
+        <a href="{% url 'jobrole_list' %}" class="btn btn-secondary">Back</a>
+      {% else %}
+        <button type="submit" class="btn btn-accent">Save</button>
+        <a href="{% url 'jobrole_list' %}" class="btn btn-secondary">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+{% if view_mode %}
+<script>
+  // 🔒 Disable all fields in view mode
+  document.querySelectorAll('input,textarea,select').forEach(el=>{
+    el.setAttribute('disabled','disabled');
+  });
+</script>
+{% endif %}
+{% endblock %}

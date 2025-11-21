@@ -1,0 +1,175 @@
+{% extends "employee_management/employee_dashboard1.html" %}
+
+{% block title %}My Dashboard | SmartHR ERP{% endblock %}
+
+{% block content %}
+<style>
+  .kpi-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    padding: 30px 20px;
+    color: var(--text-dark);
+  }
+  .kpi-card .fs-2 { margin-bottom: 10px; }
+  .kpi-card .fw-bold { font-weight: 700; }
+  .kpi-card .text-muted { color: var(--text-muted); }
+  .quick-actions {
+    background: var(--card-bg);
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  }
+  .quick-actions .btn {
+    border-radius: 8px;
+    font-weight: 600;
+    transition: background-color 0.3s ease;
+  }
+  .quick-actions .btn i {
+    font-size: 1.1rem;
+  }
+</style>
+
+<div class="row g-4 mb-4">
+  <!-- Leaves Taken + Upcoming -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card kpi-card text-center">
+      <div class="fs-2 text-danger"><i class="bi bi-calendar3"></i></div>
+      <div class="fw-bold fs-4">{{ total_leaves_taken }} Leaves Taken</div>
+      {% if upcoming_leave %}
+        <div class="text-muted small mt-2">
+          Upcoming Approved Leave:
+          <div class="mt-2 mb-0">
+            <strong>{{ upcoming_leave.start_date }} → {{ upcoming_leave.end_date }}</strong><br>
+            <small class="text-muted">{{ upcoming_leave.get_leave_type_display }}</small>
+          </div>
+        </div>
+      {% else %}
+        <div class="text-muted small mt-2">No Upcoming Leave</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Attendance Today / Monthly % -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card kpi-card text-center">
+      <div class="fs-2 {% if is_present_today %}text-success{% else %}text-danger{% endif %}">
+        <i class="bi bi-person-fill"></i>
+      </div>
+      <div class="fw-bold fs-4">
+        {% if is_present_today %}
+          Present
+        {% else %}
+          Absent
+        {% endif %}
+      </div>
+      <div class="text-muted">Today’s Attendance</div>
+      <div class="mt-2 small text-muted">
+        <i class="bi bi-graph-up-arrow me-1"></i>
+        Monthly Attendance: <strong>{{ attendance_percentage }}%</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payslips -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card kpi-card text-center">
+      <div class="fs-2 text-warning"><i class="bi bi-currency-rupee"></i></div>
+      <div class="fw-bold fs-4">{{ payslip_count }}</div>
+      <div class="text-muted">Payslips Available</div>
+      {% if last_payslip %}
+        <div class="small mt-1 text-muted">
+          Last: {{ last_payslip }}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- New KPI Card for Leave Balance -->
+  {% for leave_type, info in leave_balance_info.items %}
+    <div class="col-md-6 col-lg-3">
+      <div class="card kpi-card text-center">
+        <div class="fs-2 text-primary"><i class="bi bi-calendar-check"></i></div>
+        <div class="fw-bold fs-4">{{ leave_type }} Balance</div>
+        <div class="text-muted">Total: {{ info.balance }} Days</div>
+        <div class="mt-2 text-muted">
+          Taken: {{ info.total_taken }} Days
+        </div>
+        <div class="mt-2 text-muted">
+          Pending: {{ info.pending }} Days
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<!-- Quick Actions -->
+<div class="quick-actions">
+  <div class="fw-bold mb-3 fs-5">Quick Actions</div>
+  <div class="d-flex flex-wrap gap-3">
+    <a href="{% url 'employee_leave_create' %}" class="btn btn-outline-primary d-flex align-items-center">
+      <i class="bi bi-calendar-plus me-2"></i> Apply Leave
+    </a>
+    <a href="{% url 'employee_payslips' %}" class="btn btn-outline-success d-flex align-items-center">
+      <i class="bi bi-currency-dollar me-2"></i> View Payslips
+    </a>
+    <a href="{% url 'employee_profile' %}" class="btn btn-outline-secondary d-flex align-items-center">
+      <i class="bi bi-person-circle me-2"></i> My Profile
+    </a>
+  </div>
+</div>
+
+<!-- Snackbar for messages -->
+<div id="snackbar"></div>
+
+<script>
+  function showSnackbar(message) {
+    const snackbar = document.getElementById("snackbar");
+    snackbar.textContent = message;
+    snackbar.className = "show";
+    setTimeout(() => {
+      snackbar.className = snackbar.className.replace("show", "");
+    }, 3000);
+  }
+
+  {% if messages %}
+    {% for message in messages %}
+      showSnackbar("{{ message|escapejs }}");
+    {% endfor %}
+  {% endif %}
+</script>
+
+<style>
+  #snackbar {
+    visibility: hidden;
+    min-width: 250px;
+    background-color: #333;
+    color: #fff;
+    text-align: center;
+    border-radius: 4px;
+    padding: 12px;
+    position: fixed;
+    z-index: 1100;
+    left: 50%;
+    bottom: 30px;
+    transform: translateX(-50%);
+    font-size: 14px;
+  }
+
+  #snackbar.show {
+    visibility: visible;
+    animation: fadein 0.5s, fadeout 0.5s 2.5s;
+  }
+
+  @keyframes fadein {
+    from { bottom: 0; opacity: 0; }
+    to { bottom: 30px; opacity: 1; }
+  }
+
+  @keyframes fadeout {
+    from { bottom: 30px; opacity: 1; }
+    to { bottom: 0; opacity: 0; }
+  }
+</style>
+
+{% endblock %}
