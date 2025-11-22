@@ -6,13 +6,11 @@ from pathlib import Path
 try:
     print("WSGI: starting wsgi.py")
 except Exception:
-    # If stdout is not available, ignore
     pass
 
-# Project root (where manage.py lives)
+# Project root (where manage.py is)
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
-# Our custom site-packages folder created by GitHub Actions
 site_packages = ROOT_DIR / ".python_packages" / "lib" / "site-packages"
 
 try:
@@ -25,7 +23,7 @@ except Exception:
 if site_packages.exists():
     sys.path.insert(0, str(site_packages))
     try:
-        print("WSGI: .python_packages/lib/site-packages added to sys.path")
+        print("WSGI: added .python_packages/lib/site-packages to sys.path")
         print("WSGI: first 5 sys.path entries:", sys.path[:5])
     except Exception:
         pass
@@ -37,7 +35,6 @@ else:
 
 from django.core.wsgi import get_wsgi_application
 
-# On Azure → set DJANGO_ENV=deployment
 DJANGO_ENV = os.getenv("DJANGO_ENV", "local").lower()
 try:
     print(f"WSGI: DJANGO_ENV = {DJANGO_ENV}")
