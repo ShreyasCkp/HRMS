@@ -8,9 +8,8 @@ from django.shortcuts import get_object_or_404
 from io import BytesIO
 from django.template.loader import render_to_string
 from django.core.files.base import ContentFile
-
-
-
+from .utils import generate_payslip_pdf
+from django.contrib.staticfiles.storage import staticfiles_storage  # make sure this is imported too
 from django.shortcuts import render
 from django.db.models import Sum, Avg
 from .models import Payroll
@@ -228,7 +227,6 @@ from django.core.files.storage import default_storage
 from django.conf import settings
 import os
 from io import BytesIO
-from weasyprint import HTML
 from .models import Payroll
 from django.contrib.staticfiles.storage import staticfiles_storage
 from decimal import Decimal
@@ -236,17 +234,10 @@ import num2words
 import calendar
 
 def generate_payslip_download(request, pk):
-    """
-    ✅ Single endpoint:
-       - Always generates the payslip if not generated already.
-       - If ?action=download and user is HR/Admin/owner → downloads PDF.
-    """
-    payroll = get_object_or_404(Payroll, pk=pk)
-
-    # Always generate if not generated already
-    if not payroll.payslip_pdf:
-        # Convert net salary to words
-        net_salary = Decimal(payroll.net_salary or 0)
+    ...
+    if not Payroll.payslip_pdf:
+        # Convert net salary to words (keep this part as you already wrote)
+        net_salary = Decimal(Payroll.net_salary or 0)
         rupees = int(net_salary)
         paise = int((net_salary - rupees) * 100)
 
@@ -258,12 +249,15 @@ def generate_payslip_download(request, pk):
                 + " Paise Only"
             )
         else:
-            net_salary_in_words = num2words.num2words(rupees, lang="en_IN").title() + " Rupees Only"
+            net_salary_in_words = (
+                num2words.num2words(rupees, lang="en_IN").title()
+                + " Rupees Only"
+            )
 
-        # Format month (e.g., Jan-2025)
+        # Format month (e.g., Jan-2025) – keep your existing logic
         try:
-            if isinstance(payroll.month, str) and "-" in payroll.month:
-                year, month = payroll.month.split("-")
+            if isinstance(Payroll.month, str) and "-" in Payroll.month:
+                year, month = Payroll.month.split("-")
                 formatted_month_year = f"{calendar.month_abbr[int(month)]}-{year}"
             else:
                 formatted_month_year = "Invalid-Date"
@@ -278,43 +272,46 @@ def generate_payslip_download(request, pk):
             staticfiles_storage.url("images/logo.png")
         )
 
-        # Render template to HTML
-        html_string = render_to_string(
+        # ✅ Build context for template
+        context = {
+            "payroll": Payroll,
+            "formatted_month_year": formatted_month_year,
+            "net_salary_in_words": net_salary_in_words,
+            "signature_image_url": signature_image_url,
+            "company_logo_url": company_logo_url,
+        }
+
+        # ✅ Use xhtml2pdf helper (lazy import inside utils)
+        pdf_bytes = generate_payslip_pdf(
             "payroll_management/payslip_template.html",
-            {
-                "payroll": payroll,
-                "formatted_month_year": formatted_month_year,
-                "net_salary_in_words": net_salary_in_words,
-                "signature_image_url": signature_image_url,
-                "company_logo_url": company_logo_url,
-            },
+            context
         )
 
-        # Generate PDF into memory
-        pdf_file = BytesIO()
-        HTML(string=html_string, base_url=request.build_absolute_uri("/")).write_pdf(pdf_file)
-        pdf_file.seek(0)
+        if not pdf_bytes:
+            return HttpResponse("Error generating PDF", status=500)
 
-        # ✅ Save PDF to model field under MEDIA_ROOT/payslips/
-        filename = f"payslip_{payroll.employee.id}_{payroll.month}.pdf"
-        payroll.payslip_pdf.save(filename, ContentFile(pdf_file.read()), save=True)
+        filename = f"payslip_{Payroll.employee.id}_{Payroll.month}.pdf"
+        Payroll.payslip_pdf.save(filename, ContentFile(pdf_bytes), save=True)
+
+    # rest of your download / access-control logic stays the same...
+
 
     # ------------------------------------------------------------
     # ✅ Download flow
     # ------------------------------------------------------------
     action = request.GET.get("action", "").lower()
     user = request.user
-    employee_user = getattr(payroll.employee, "user", None)
+    employee_user = getattr(Payroll.employee, "user", None)
 
     if action == "download" and not isinstance(user, AnonymousUser):
         is_hr_or_admin = user.is_staff
         is_employee_owner = (employee_user == user)
 
         if is_hr_or_admin or is_employee_owner:
-            file_path = payroll.payslip_pdf.path
+            file_path = Payroll.payslip_pdf.path
             if os.path.exists(file_path):
                 return FileResponse(
-                    payroll.payslip_pdf.open("rb"),
+                    Payroll.payslip_pdf.open("rb"),
                     as_attachment=True,
                     filename=os.path.basename(file_path),
                 )
