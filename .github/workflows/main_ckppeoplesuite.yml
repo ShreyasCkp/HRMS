@@ -24,9 +24,11 @@ jobs:
       - name: Install dependencies (local + Azure .python_packages)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          # Install for local/CI (so manage.py works)
+          python -m pip install --no-cache-dir -r requirements.txt
+          # Install a copy for Azure runtime under .python_packages
           mkdir -p .python_packages/lib/site-packages
-          python -m pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+          python -m pip install --no-cache-dir -r requirements.txt --target=".python_packages/lib/site-packages"
 
       # Run migrations and collectstatic against your Azure DB
       - name: Run migrations and collect static files
@@ -42,6 +44,8 @@ jobs:
           EMAIL_HOST_USER: ${{ secrets.EMAIL_HOST_USER }}
           EMAIL_HOST_PASSWORD: ${{ secrets.EMAIL_HOST_PASSWORD }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Make sure Django can also see the .python_packages if needed
+          PYTHONPATH: .python_packages/lib/site-packages
         run: |
           python manage.py migrate --noinput
           python manage.py collectstatic --noinput
