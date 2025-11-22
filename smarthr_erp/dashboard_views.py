@@ -11,11 +11,13 @@ def session_login_required(view_func):
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):
         if not request.session.get("user_id"):
+            # not logged in → go to login
             return redirect(f"/login/?next={request.path}")
         return view_func(request, *args, **kwargs)
     return _wrapped
 
-# --------- SAFE imports (if migrations/tables missing on Azure, we don’t crash) ---------
+
+# --------- SAFE imports (so Azure doesn’t 500 if something missing) ---------
 try:
     from employee_management.models import Employee, Leave
 except Exception:
@@ -43,8 +45,15 @@ except Exception:
     Notification = None
 
 
-@session_login_required
 def home_redirect(request):
+    """
+    Root URL '/':
+
+    - If NOT logged in → go to login page
+    - If logged in      → go to dashboard
+    """
+    if not request.session.get("user_id"):
+        return redirect("login")
     return redirect("dashboard")
 
 
@@ -52,7 +61,7 @@ def home_redirect(request):
 def dashboard(request):
     today = date.today()
 
-    # --------- DEFAULTS (if any query fails, we still render the dashboard) ---------
+    # --------- DEFAULTS ---------
     total_employees = 0
     active_leaves = 0
     present_today = 0
@@ -83,21 +92,19 @@ def dashboard(request):
         # Attendance today
         if Attendance is not None:
             present_today = Attendance.objects.filter(
-                date=today, clock_in__isnull=False
+                date=today,
+                clock_in__isnull=False,
             ).count()
 
-        # Payroll
+        # Payroll + salary ranges
         if Payroll is not None:
             monthly_payroll = (
-                Payroll.objects.filter(
-                    status="Paid", month=today.strftime("%Y-%m")
-                ).aggregate(total=Sum("net_salary"))["total"]
+                Payroll.objects.filter(status="Paid", month=today.strftime("%Y-%m"))
+                .aggregate(total=Sum("net_salary"))["total"]
                 or 0
             )
 
-            for emp in Payroll.objects.filter(
-                status="Paid", month=today.strftime("%Y-%m")
-            ):
+            for emp in Payroll.objects.filter(status="Paid", month=today.strftime("%Y-%m")):
                 salary = float(emp.net_salary or 0)
                 if salary <= 20000:
                     salary_ranges["0-20k"] += 1
@@ -116,9 +123,7 @@ def dashboard(request):
 
         # Upcoming events
         if OfficeEvent is not None:
-            upcoming_events = OfficeEvent.objects.filter(
-                date__gte=today
-            ).order_by("date")[:5]
+            upcoming_events = OfficeEvent.objects.filter(date__gte=today).order_by("date")[:5]
 
         # Notifications
         if Notification is not None:
@@ -143,7 +148,7 @@ def dashboard(request):
             leave_labels = [item["leave_type__name"] for item in leave_data]
             leave_counts = [item["count"] for item in leave_data]
 
-        # Current user display name from session
+        # Current user display name using your session user_id
         user_id = request.session.get("user_id")
         if user_id and UserCustom is not None:
             try:
@@ -153,7 +158,6 @@ def dashboard(request):
                 pass
 
     except Exception as e:
-        # If ANYTHING explodes on Azure DB/tables, we just log and show a safe dashboard
         print("Dashboard error:", e)
 
     context = {

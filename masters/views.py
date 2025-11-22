@@ -344,46 +344,62 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 
 def login_view(request):
+    # if already logged in
+    if request.session.get("user_id"):
+        return redirect("dashboard")
+
     context = {}
-    context['users'] = UserCustom.objects.all()
-    
+
+    # safe users load
+    try:
+        context['users'] = UserCustom.objects.all()
+    except Exception as e:
+        print("Error loading users in login_view:", e)
+        context['users'] = []
+
     if request.method == "POST" and "password" in request.POST:
         username = request.POST.get("username", "").strip()
         password = request.POST.get("password", "").strip()
-        next_url = request.POST.get("next") or request.GET.get("next") or reverse("dashboard")
+        next_url = (
+            request.POST.get("next")
+            or request.GET.get("next")
+            or reverse("dashboard")
+        )
         context["selected_user"] = username
 
         try:
             user = UserCustom.objects.get(username=username)
-            if user.is_locked:
-                context["error"] = "Account is locked. Contact admin."
-                return render(request, "registration/login.html", context)
-
-            if user.password != password:
-                user.wrong_attempts = (user.wrong_attempts or 0) + 1
-                if user.wrong_attempts >= 3:
-                    user.is_locked = True
-                user.save()
-                context["error"] = "Invalid password."
-                return render(request, "registration/login.html", context)
-
-            # ✅ Successful login
-            user.wrong_attempts = 0
-            user.save()
-
-            request.session["user_id"] = user.id
-            request.session["username"] = user.username
-            request.session["user_display_name"] = user.get_full_name() or user.username
-
-            response = HttpResponseRedirect(next_url)
-            response.set_cookie("user_id", user.id)
-            response.set_cookie("username", user.username)
-            return response
-
         except UserCustom.DoesNotExist:
             context["error"] = "Invalid credentials."
+            return render(request, "registration/login.html", context)
+
+        if user.is_locked:
+            context["error"] = "Account is locked. Contact admin."
+            return render(request, "registration/login.html", context)
+
+        if user.password != password:
+            user.wrong_attempts = (user.wrong_attempts or 0) + 1
+            if user.wrong_attempts >= 3:
+                user.is_locked = True
+            user.save()
+            context["error"] = "Invalid credentials."
+            return render(request, "registration/login.html", context)
+
+        # success
+        user.wrong_attempts = 0
+        user.save()
+
+        request.session["user_id"] = user.id
+        request.session["username"] = user.username
+        request.session["user_display_name"] = user.get_full_name() or user.username
+
+        response = redirect(next_url)
+        response.set_cookie("user_id", user.id)
+        response.set_cookie("username", user.username)
+        return response
 
     return render(request, "registration/login.html", context)
+
 
 
 
@@ -473,11 +489,16 @@ def password_reset_view(request):
     return render(request, "registration/password_reset.html", context)
 
 def logout_view(request):
-    response = redirect("login_view")
+    # clear Django session
+    request.session.flush()
+
+    # clear our custom cookies
+    response = redirect("login")
     response.delete_cookie("user_id")
     response.delete_cookie("username")
-    request.session.flush()
+
     return response
+
 
 def master_dashboard(request):
     user_id = request.session.get("user_id")
