@@ -10,6 +10,7 @@ asgiref==3.9.2
 channels==4.3.2
 channels-redis==4.3.0
 redis==4.6.0
+num2words==0.5.13
 
 # Database (Postgres)
 psycopg2-binary==2.9.10
