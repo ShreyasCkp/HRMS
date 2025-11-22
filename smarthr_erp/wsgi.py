@@ -1,18 +1,28 @@
 import os
+import sys
+from pathlib import Path
+
+# 👇 Make sure Python can see .python_packages (where GitHub Actions installed deps)
+ROOT_DIR = Path(__file__).resolve().parent.parent  # project root (where manage.py is)
+site_packages = ROOT_DIR / ".python_packages" / "lib" / "site-packages"
+if site_packages.exists():
+    sys.path.insert(0, str(site_packages))
+
 from django.core.wsgi import get_wsgi_application
 
-# If DJANGO_SETTINGS_MODULE is explicitly set (Azure/App Service/Gunicorn), use it.
-# Otherwise default to 'smarthr_erp.deployment' when DEBUG=False in env, else use base settings.
-if "DJANGO_SETTINGS_MODULE" not in os.environ:
-    # try to read DEBUG from .env if present so local testing with DEBUG=False uses deployment
-    # but avoid importing django/environ here — keep simple: check env var DEBUG
-    debug_env = os.environ.get("DEBUG", "True")
-    if debug_env.lower() in ("false", "0", "no"):
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "smarthr_erp.deployment")
-    else:
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "smarthr_erp.settings")
+# Decide settings based on environment variable (like your old project)
+# On Azure → set DJANGO_ENV=deployment
+DJANGO_ENV = os.getenv("DJANGO_ENV", "local").lower()
+
+if DJANGO_ENV == "deployment":
+    os.environ.setdefault(
+        "DJANGO_SETTINGS_MODULE",
+        "smarthr_erp.deployment"
+    )
 else:
-    # honor whatever the environment provided (Azure sets this normally)
-    pass
+    os.environ.setdefault(
+        "DJANGO_SETTINGS_MODULE",
+        "smarthr_erp.settings"
+    )
 
 application = get_wsgi_application()

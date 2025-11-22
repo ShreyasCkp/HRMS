@@ -1,7 +1,7 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from datetime import date
-import json, re, random
+import json, re, random, difflib
 
 from masters.models import Workspace, OfficeEvent, Department
 from employee_management.models import Employee
@@ -11,16 +11,12 @@ from attendance_management.models import Attendance
 from recruitment.models import JobPosting, Candidate
 from performance_management.models import PerformanceReview
 
-from sentence_transformers import SentenceTransformer, util
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch
+# ✅ Use OpenAI instead of local heavy models
+from openai import OpenAI
 
-# Load models once
-intent_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-chatbot_tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
-chatbot_model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
+client = OpenAI()
 
-# In-memory chat history storage
+# In-memory chat history storage (per user)
 CHAT_HISTORY = {}
 
 INTENT_EXAMPLES = {
@@ -90,54 +86,65 @@ SENSITIVE_TOPICS = {
 # Abuse filter
 ABUSIVE_WORDS = ['idiot', 'fuck', 'stupid', 'fool', 'nonsense', 'shut up', 'dumb', 'mad', 'hate', 'kill', 'bloody']
 
+
 def contains_abuse(message):
     return any(word in message.lower() for word in ABUSIVE_WORDS)
 
-def detect_intent(user_input):
-    user_embedding = intent_model.encode(user_input, convert_to_tensor=True)
+
+# ✅ New: lightweight intent detection (no sentence-transformers)
+def detect_intent(user_input: str):
+    user_input = user_input.lower()
     best_intent = None
     highest_score = 0.0
+
     for intent, examples in INTENT_EXAMPLES.items():
         for example in examples:
-            example_embedding = intent_model.encode(example, convert_to_tensor=True)
-            score = util.pytorch_cos_sim(user_embedding, example_embedding).item()
+            # Simple similarity + substring check
+            example_lower = example.lower()
+            if example_lower in user_input:
+                return intent
+            score = difflib.SequenceMatcher(None, user_input, example_lower).ratio()
             if score > highest_score:
                 highest_score = score
                 best_intent = intent
+
     return best_intent if highest_score > 0.6 else None
 
-def generate_personality_response(user_message, chat_history_ids=None):
-    persona_prompt = (
-        "You are Sara, a witty but professional virtual HR assistant. "
-        "Answer clearly, politely, and concisely. Avoid unrelated topics or rambling.\n"
-        f"User: {user_message}\nSara:"
+
+# ✅ New: use OpenAI for fallback conversational answer
+def generate_personality_response(user_message: str, user_id: str) -> str:
+    system_prompt = (
+        "You are Sara, a witty but professional virtual HR assistant for an HRMS web app. "
+        "You help with HR, attendance, leave, recruitment, events, and departments. "
+        "Answer clearly, politely, and concisely in 1–3 sentences. "
+        "Avoid unrelated topics and do not discuss salaries, confidential company data, or personal secrets."
     )
 
-    new_input_ids = chatbot_tokenizer.encode(persona_prompt + chatbot_tokenizer.eos_token, return_tensors='pt')
+    history = CHAT_HISTORY.get(user_id, [])
 
-    if chat_history_ids is not None:
-        bot_input_ids = torch.cat([chat_history_ids, new_input_ids], dim=-1)
-    else:
-        bot_input_ids = new_input_ids
+    messages = [{"role": "system", "content": system_prompt}] + history + [
+        {"role": "user", "content": user_message}
+    ]
 
-    chat_history_ids = chatbot_model.generate(
-        bot_input_ids,
-        max_length=bot_input_ids.shape[-1] + 80,
-        pad_token_id=chatbot_tokenizer.eos_token_id,
-        do_sample=True,
-        top_k=50,
-        top_p=0.9,
-        temperature=0.65,
-        num_return_sequences=1,
-        no_repeat_ngram_size=3,
-    )
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",  # or any model you have access to
+            messages=messages,
+            max_tokens=150,
+            temperature=0.6,
+        )
+        answer = completion.choices[0].message.content.strip()
+    except Exception as e:
+        print("OpenAI error:", e)
+        answer = random.choice(DEFAULT_UNKNOWN_RESPONSES)
 
-    response = chatbot_tokenizer.decode(chat_history_ids[:, bot_input_ids.shape[-1]:][0], skip_special_tokens=True).strip()
+    # Update history (keep it short to save tokens)
+    history.append({"role": "user", "content": user_message})
+    history.append({"role": "assistant", "content": answer})
+    CHAT_HISTORY[user_id] = history[-10:]  # last 10 turns max
 
-    if len(response) < 3 or response.lower() in ["i don't know", "i'm not sure", "sorry", "hi! what would you like to know?"]:
-        response = "Sorry, I didn't quite get that. Could you please rephrase your question?"
+    return answer
 
-    return response, chat_history_ids
 
 @csrf_exempt
 def chatbot_api(request):
@@ -200,29 +207,49 @@ def chatbot_api(request):
             workspaces = Workspace.objects.all()
             available = workspaces.filter(is_available=True)
             if 'available' in user_message_lower or 'free' in user_message_lower:
-                answer = f"Available workspaces: {', '.join([f'{w.name} ({w.get_workspace_type_display()})' for w in available]) or 'None'}"
+                answer = (
+                    f"Available workspaces: "
+                    f"{', '.join([f'{w.name} ({w.get_workspace_type_display()})' for w in available]) or 'None'}"
+                )
             else:
-                answer = f"All workspaces: {', '.join([f'{w.name} ({w.get_workspace_type_display()})' for w in workspaces])}"
+                answer = (
+                    f"All workspaces: "
+                    f"{', '.join([f'{w.name} ({w.get_workspace_type_display()})' for w in workspaces])}"
+                )
 
         # 4. Event Queries
         if not answer and any(word in user_message_lower for word in ['event', 'function', 'happening']):
             today = date.today()
             events = OfficeEvent.objects.filter(date__gte=today).order_by('date')
-            answer = 'Upcoming events: ' + ', '.join([f"{e.title} on {e.date} at {e.location}" for e in events]) if events.exists() else 'No upcoming events.'
+            answer = (
+                'Upcoming events: ' + ', '.join([f"{e.title} on {e.date} at {e.location}" for e in events])
+                if events.exists()
+                else 'No upcoming events.'
+            )
 
         # 5. Intent Detection & Handling
         if not answer:
             intent = detect_intent(user_message_lower)
 
             if intent == "employee_count":
-                answer = f"Total employees: {Employee.objects.count()}. Active: {Employee.objects.filter(is_active=True).count()}."
+                answer = (
+                    f"Total employees: {Employee.objects.count()}. "
+                    f"Active: {Employee.objects.filter(is_active=True).count()}."
+                )
             elif intent == "leaves_today":
-                on_leave = LeaveRequest.objects.filter(status='Approved', start_date__lte=date.today(), end_date__gte=date.today()).count()
+                on_leave = LeaveRequest.objects.filter(
+                    status='Approved',
+                    start_date__lte=date.today(),
+                    end_date__gte=date.today()
+                ).count()
                 answer = f"Employees on leave today: {on_leave}."
             elif intent == "payroll_status":
                 answer = "Payroll information is confidential. Please contact HR for assistance."
             elif intent == "attendance_today":
-                present = Attendance.objects.filter(date=date.today(), clock_in__isnull=False).count()
+                present = Attendance.objects.filter(
+                    date=date.today(),
+                    clock_in__isnull=False
+                ).count()
                 answer = f"Present today: {present} employees."
             elif intent == "job_postings":
                 count = JobPosting.objects.filter(is_active=True).count()
@@ -258,34 +285,23 @@ def chatbot_api(request):
                 else:
                     answer = "Please specify an employee ID."
             elif intent == "switch_model":
-                answer = "Model switching is not enabled on this setup. Currently using DialoGPT."
+                answer = "Model switching is not enabled on this setup. Currently using an OpenAI-based assistant."
 
         # 5.5 Handle leave type questions manually
         if not answer:
             if any(phrase in user_message_lower for phrase in ["leave types", "types of leave", "what type of leave", "kinds of leave"]):
                 answer = "I'm afraid I don't have access to leave type information. Please contact HR for the leave policy."
 
-        # 6. Fallback to DialoGPT conversational model
+        # 6. Fallback to OpenAI conversational model
         if not answer:
-            chat_history_ids = CHAT_HISTORY.get(user_id)
-            answer, chat_history_ids = generate_personality_response(user_message, chat_history_ids)
-            CHAT_HISTORY[user_id] = chat_history_ids
-
-        # 7. Escalation logic (optional, uncomment if you want escalation)
-        # if not answer:
-        #     department = detect_related_department(user_message_lower)
-        #     log_escalated_question(user_message, user_id, department)
-        #
-        #     answer = (
-        #         f"I'm not sure about that. I've forwarded your question to the {department} team. "
-        #         "They'll get back to you shortly."
-        #     )
+            answer = generate_personality_response(user_message, user_id)
 
         return JsonResponse({'answer': answer})
 
     except Exception as e:
         print("Chatbot error:", e)
         return JsonResponse({'answer': "Sorry, something went wrong while processing your request."})
+
 
 # Basic department detection logic
 def detect_related_department(message):
@@ -308,6 +324,7 @@ def detect_related_department(message):
             return dept
     return "HR"  # default fallback
 
+
 def log_escalated_question(question, user_id, department):
     # You can replace this with actual model logging / DB table
     try:
@@ -323,7 +340,9 @@ def log_escalated_question(question, user_id, department):
     except ImportError:
         print("Escalation model not found; skipping logging.")
 
+
 from django.core.mail import send_mail
+
 
 def notify_department_email(question, department):
     emails = {
