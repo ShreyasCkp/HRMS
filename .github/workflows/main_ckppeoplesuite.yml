@@ -61,9 +61,11 @@ jobs:
         with:
           name: python-app
           path: |
+            .python_packages/**
             .
             !.git/
             !**/__pycache__/
+
 
   deploy:
     runs-on: ubuntu-latest
@@ -96,3 +98,4 @@ jobs:
           app-name: "CKPPeopleSuite"
           slot-name: "Production"
           package: .
+
