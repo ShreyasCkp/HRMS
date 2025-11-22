@@ -20,16 +20,13 @@ jobs:
         with:
           python-version: "3.10"
 
-      # 1) Install dependencies *both* globally (for CI) and into .python_packages
-      - name: Install dependencies (global + .python_packages)
+      # (Optional but useful) Install deps & run migrations/static locally in CI
+      - name: Install dependencies (CI only)
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          mkdir -p .python_packages/lib/site-packages
-          python -m pip install --no-cache-dir -r requirements.txt --target=".python_packages/lib/site-packages"
 
-      # 2) Run migrations and collectstatic using .python_packages
-      - name: Run migrations and collect static files
+      - name: Run migrations and collect static files (CI check)
         env:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           DEBUG: "False"
@@ -44,7 +41,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           DJANGO_ENV: "deployment"
         run: |
-          export PYTHONPATH=".python_packages/lib/site-packages"
           python manage.py migrate --noinput
           python manage.py collectstatic --noinput
 
@@ -55,15 +51,17 @@ jobs:
           echo "----------------------"
           ls -R
 
-      # 3) Upload EVERYTHING including .python_packages (but not .git / __pycache__)
+      # Upload ONLY your source code (no venv / no .python_packages)
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
           name: python-app
           path: |
-            .python_packages/**
             .
             !.git/
+            !.github/
+            !.venv/
+            !.python_packages/
             !**/__pycache__/
 
   deploy:
@@ -79,22 +77,9 @@ jobs:
         with:
           name: python-app
 
-      - name: List artifact files BEFORE flatten
+      - name: List artifact files (recursive)
         run: |
-          echo "=== ROOT BEFORE ==="
           pwd
-          ls -la
-          echo "----------------------"
-          ls -R
-
-      # 🔹 IMPORTANT: move everything out of python-app/ to root
-      - name: Move app contents to repo root
-        run: |
-          # Move all files (including hidden) from python-app/ to current dir
-          shopt -s dotglob
-          mv python-app/* .
-          rmdir python-app
-          echo "=== ROOT AFTER MOVE ==="
           ls -la
           echo "----------------------"
           ls -R
