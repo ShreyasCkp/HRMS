@@ -1,18 +1,28 @@
-from django.shortcuts import render, redirect
-from .models import Payroll
-from .forms import PayrollForm
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import (
+    HttpResponse,
+    FileResponse,
+    HttpResponseForbidden,
+    JsonResponse,
+)
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
-from io import BytesIO
+from django.contrib.auth.models import AnonymousUser
+from django.db import IntegrityError
+from django.db.models import Sum, Avg
 from django.template.loader import render_to_string
 from django.core.files.base import ContentFile
-from .utils import generate_payslip_pdf
-from django.contrib.staticfiles.storage import staticfiles_storage  # make sure this is imported too
-from django.shortcuts import render
-from django.db.models import Sum, Avg
+from django.contrib.staticfiles.storage import staticfiles_storage
+
+from decimal import Decimal
+import calendar
+import num2words
+
 from .models import Payroll
+from .forms import PayrollForm
+from .utils import generate_payslip_pdf
+from employee_management.models import Employee
+
 
 def payroll_list(request):
     payrolls = Payroll.objects.select_related('employee').all()
@@ -234,10 +244,17 @@ import num2words
 import calendar
 
 def generate_payslip_download(request, pk):
-    ...
-    if not Payroll.payslip_pdf:
-        # Convert net salary to words (keep this part as you already wrote)
-        net_salary = Decimal(Payroll.net_salary or 0)
+    """
+    ✅ Single endpoint:
+       - Always generates the payslip if not generated already.
+       - If ?action=download and user is HR/Admin/owner → downloads PDF.
+    """
+    payroll = get_object_or_404(Payroll, pk=pk)
+
+    # Always generate if not generated already
+    if not payroll.payslip_pdf:
+        # Convert net salary to words
+        net_salary = Decimal(payroll.net_salary or 0)
         rupees = int(net_salary)
         paise = int((net_salary - rupees) * 100)
 
@@ -254,10 +271,10 @@ def generate_payslip_download(request, pk):
                 + " Rupees Only"
             )
 
-        # Format month (e.g., Jan-2025) – keep your existing logic
+        # Format month (e.g., Jan-2025)
         try:
-            if isinstance(Payroll.month, str) and "-" in Payroll.month:
-                year, month = Payroll.month.split("-")
+            if isinstance(payroll.month, str) and "-" in payroll.month:
+                year, month = payroll.month.split("-")
                 formatted_month_year = f"{calendar.month_abbr[int(month)]}-{year}"
             else:
                 formatted_month_year = "Invalid-Date"
@@ -272,46 +289,43 @@ def generate_payslip_download(request, pk):
             staticfiles_storage.url("images/logo.png")
         )
 
-        # ✅ Build context for template
+        # Context for template
         context = {
-            "payroll": Payroll,
+            "payroll": payroll,
             "formatted_month_year": formatted_month_year,
             "net_salary_in_words": net_salary_in_words,
             "signature_image_url": signature_image_url,
             "company_logo_url": company_logo_url,
         }
 
-        # ✅ Use xhtml2pdf helper (lazy import inside utils)
+        # ✅ Generate PDF using helper (xhtml2pdf inside)
         pdf_bytes = generate_payslip_pdf(
             "payroll_management/payslip_template.html",
-            context
+            context,
         )
 
         if not pdf_bytes:
             return HttpResponse("Error generating PDF", status=500)
 
-        filename = f"payslip_{Payroll.employee.id}_{Payroll.month}.pdf"
-        Payroll.payslip_pdf.save(filename, ContentFile(pdf_bytes), save=True)
-
-    # rest of your download / access-control logic stays the same...
-
+        filename = f"payslip_{payroll.employee.id}_{payroll.month}.pdf"
+        payroll.payslip_pdf.save(filename, ContentFile(pdf_bytes), save=True)
 
     # ------------------------------------------------------------
     # ✅ Download flow
     # ------------------------------------------------------------
     action = request.GET.get("action", "").lower()
     user = request.user
-    employee_user = getattr(Payroll.employee, "user", None)
+    employee_user = getattr(payroll.employee, "user", None)
 
     if action == "download" and not isinstance(user, AnonymousUser):
         is_hr_or_admin = user.is_staff
         is_employee_owner = (employee_user == user)
 
         if is_hr_or_admin or is_employee_owner:
-            file_path = Payroll.payslip_pdf.path
+            file_path = payroll.payslip_pdf.path
             if os.path.exists(file_path):
                 return FileResponse(
-                    Payroll.payslip_pdf.open("rb"),
+                    payroll.payslip_pdf.open("rb"),
                     as_attachment=True,
                     filename=os.path.basename(file_path),
                 )
@@ -320,9 +334,7 @@ def generate_payslip_download(request, pk):
         else:
             return HttpResponse("Unauthorized", status=403)
 
-    # ------------------------------------------------------------
-    # ✅ Default response (just generation)
-    # ------------------------------------------------------------
+    # Default response (just generated, redirect back)
     messages.success(request, "Payslip generated successfully.")
     return redirect(request.META.get("HTTP_REFERER", "payroll_list"))
 
