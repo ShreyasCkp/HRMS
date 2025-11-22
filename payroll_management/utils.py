@@ -1,12 +1,18 @@
-from xhtml2pdf import pisa
+from django.template.loader import get_template
+from django.http import HttpResponse
 from io import BytesIO
-from django.template.loader import render_to_string
 
+def generate_payslip_pdf(template_src, context_dict):
+    # Local import to avoid crashing at startup
+    from xhtml2pdf import pisa
 
-def generate_payslip_pdf(payroll):
-    html = render_to_string('payroll_management/payslip_template.html', {'payroll': payroll})
+    template = get_template(template_src)
+    html = template.render(context_dict)
+
     result = BytesIO()
-    pdf = pisa.pisaDocument(BytesIO(html.encode('utf-8')), result)
-    if not pdf.err:
-        return result.getvalue()
-    return None
+    pdf = pisa.CreatePDF(html, dest=result)
+
+    if pdf.err:
+        return None
+
+    return result.getvalue()

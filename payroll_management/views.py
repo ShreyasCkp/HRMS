@@ -8,7 +8,6 @@ from django.shortcuts import get_object_or_404
 from io import BytesIO
 from django.template.loader import render_to_string
 from django.core.files.base import ContentFile
-from .utils import generate_payslip_pdf
 
 
 
