@@ -1,10 +1,11 @@
+# smarthr_erp/urls.py
+
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from .dashboard_views import dashboard,home_redirect
+from .dashboard_views import dashboard, home_redirect
 from masters.views import login_view, logout_view
-
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -19,7 +20,7 @@ urlpatterns = [
     path('notifications/', include('notifications.urls')),
     path('reports/', include('reports.urls')),
 
-    # ✅ custom authentication
+    # custom authentication
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
 

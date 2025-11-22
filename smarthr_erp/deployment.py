@@ -71,3 +71,10 @@ CHANNEL_LAYERS = {
         "CONFIG": {"hosts": [REDIS_URL]},
     }
 }
+
+
+
+# Auth URLs override for production
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/dashboard/"
+LOGOUT_REDIRECT_URL = "/login/"

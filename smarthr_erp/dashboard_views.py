@@ -1,73 +1,160 @@
-from django.shortcuts import render, redirect
-from employee_management.models import Employee, Leave
-from attendance_management.models import Attendance
-from payroll_management.models import Payroll
-from masters.models import OfficeEvent, RecentActivity, UserCustom, LeaveType
+# smarthr_erp/dashboard_views.py
+
 from datetime import date, timedelta
+from functools import wraps
+
+from django.shortcuts import render, redirect
 from django.db.models import Sum, Count
-from django.contrib.auth.decorators import login_required
-from notifications.models import Notification
 
+# --------- custom decorator using your session auth ---------
+def session_login_required(view_func):
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.session.get("user_id"):
+            return redirect(f"/login/?next={request.path}")
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+# --------- SAFE imports (if migrations/tables missing on Azure, we don’t crash) ---------
+try:
+    from employee_management.models import Employee, Leave
+except Exception:
+    Employee = None
+    Leave = None
+
+try:
+    from attendance_management.models import Attendance
+except Exception:
+    Attendance = None
+
+try:
+    from payroll_management.models import Payroll
+except Exception:
+    Payroll = None
+
+try:
+    from masters.models import OfficeEvent, RecentActivity, UserCustom, LeaveType
+except Exception:
+    OfficeEvent = RecentActivity = UserCustom = LeaveType = None
+
+try:
+    from notifications.models import Notification
+except Exception:
+    Notification = None
+
+
+@session_login_required
 def home_redirect(request):
-    return redirect("login")
+    return redirect("dashboard")
 
+
+@session_login_required
 def dashboard(request):
     today = date.today()
 
-    # KPIs
-    total_employees = Employee.objects.filter(is_active=True).count()
-    active_leaves = Leave.objects.filter(
-        is_approved=True,
-        start_date__lte=today,
-        end_date__gte=today
-    ).count()
-    present_today = Attendance.objects.filter(date=today, clock_in__isnull=False).count()
-    monthly_payroll = Payroll.objects.filter(
-        status="Paid",
-        month=today.strftime("%Y-%m")
-    ).aggregate(total=Sum("net_salary"))["total"] or 0
-
-    recent_activities = RecentActivity.objects.order_by("-timestamp")[:10]
-    user_display_name = "Guest"
-    user_id = request.session.get("user_id")
-    if user_id:
-        try:
-            user = UserCustom.objects.get(id=user_id)
-            user_display_name = user.username
-        except UserCustom.DoesNotExist:
-            pass
-
-    upcoming_events = OfficeEvent.objects.filter(date__gte=today).order_by("date")[:5]
-
-    # Attendance chart data (last 7 days)
+    # --------- DEFAULTS (if any query fails, we still render the dashboard) ---------
+    total_employees = 0
+    active_leaves = 0
+    present_today = 0
+    monthly_payroll = 0
+    recent_activities = []
+    upcoming_events = []
+    notifications = []
     attendance_labels = [(today - timedelta(days=i)).strftime("%d %b") for i in range(6, -1, -1)]
-    attendance_counts = [
-        Attendance.objects.filter(date=today - timedelta(days=i), clock_in__isnull=False).count()
-        for i in range(6, -1, -1)
-    ]
-
-    # ✅ Updated Leave chart using related LeaveType model
-    leave_data = Leave.objects.filter(leave_type__isnull=False).values("leave_type__name").annotate(count=Count("id"))
-    leave_labels = [item["leave_type__name"] for item in leave_data]
-    leave_counts = [item["count"] for item in leave_data]
-
-    # Notifications
-    notifications = Notification.objects.order_by('-created_at')[:10]
-
-    # Payroll Salary Ranges Chart
+    attendance_counts = [0] * 7
+    leave_labels = []
+    leave_counts = []
     salary_ranges = {"0-20k": 0, "20k-40k": 0, "40k-60k": 0, "60k-80k": 0, "80k+": 0}
-    for emp in Payroll.objects.filter(status="Paid", month=today.strftime("%Y-%m")):
-        salary = float(emp.net_salary)
-        if salary <= 20000:
-            salary_ranges["0-20k"] += 1
-        elif salary <= 40000:
-            salary_ranges["20k-40k"] += 1
-        elif salary <= 60000:
-            salary_ranges["40k-60k"] += 1
-        elif salary <= 80000:
-            salary_ranges["60k-80k"] += 1
-        else:
-            salary_ranges["80k+"] += 1
+    user_display_name = "Guest"
+
+    try:
+        # Employees
+        if Employee is not None:
+            total_employees = Employee.objects.filter(is_active=True).count()
+
+        # Leaves
+        if Leave is not None:
+            active_leaves = Leave.objects.filter(
+                is_approved=True,
+                start_date__lte=today,
+                end_date__gte=today,
+            ).count()
+
+        # Attendance today
+        if Attendance is not None:
+            present_today = Attendance.objects.filter(
+                date=today, clock_in__isnull=False
+            ).count()
+
+        # Payroll
+        if Payroll is not None:
+            monthly_payroll = (
+                Payroll.objects.filter(
+                    status="Paid", month=today.strftime("%Y-%m")
+                ).aggregate(total=Sum("net_salary"))["total"]
+                or 0
+            )
+
+            for emp in Payroll.objects.filter(
+                status="Paid", month=today.strftime("%Y-%m")
+            ):
+                salary = float(emp.net_salary or 0)
+                if salary <= 20000:
+                    salary_ranges["0-20k"] += 1
+                elif salary <= 40000:
+                    salary_ranges["20k-40k"] += 1
+                elif salary <= 60000:
+                    salary_ranges["40k-60k"] += 1
+                elif salary <= 80000:
+                    salary_ranges["60k-80k"] += 1
+                else:
+                    salary_ranges["80k+"] += 1
+
+        # Recent activity
+        if RecentActivity is not None:
+            recent_activities = RecentActivity.objects.order_by("-timestamp")[:10]
+
+        # Upcoming events
+        if OfficeEvent is not None:
+            upcoming_events = OfficeEvent.objects.filter(
+                date__gte=today
+            ).order_by("date")[:5]
+
+        # Notifications
+        if Notification is not None:
+            notifications = Notification.objects.order_by("-created_at")[:10]
+
+        # Attendance chart last 7 days
+        if Attendance is not None:
+            attendance_counts = [
+                Attendance.objects.filter(
+                    date=today - timedelta(days=i), clock_in__isnull=False
+                ).count()
+                for i in range(6, -1, -1)
+            ]
+
+        # Leave chart
+        if Leave is not None:
+            leave_data = (
+                Leave.objects.filter(leave_type__isnull=False)
+                .values("leave_type__name")
+                .annotate(count=Count("id"))
+            )
+            leave_labels = [item["leave_type__name"] for item in leave_data]
+            leave_counts = [item["count"] for item in leave_data]
+
+        # Current user display name from session
+        user_id = request.session.get("user_id")
+        if user_id and UserCustom is not None:
+            try:
+                user = UserCustom.objects.get(id=user_id)
+                user_display_name = user.username
+            except UserCustom.DoesNotExist:
+                pass
+
+    except Exception as e:
+        # If ANYTHING explodes on Azure DB/tables, we just log and show a safe dashboard
+        print("Dashboard error:", e)
 
     context = {
         "total_employees": total_employees,

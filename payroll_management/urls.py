@@ -1,5 +1,3 @@
-# payroll/urls.py
-
 from django.urls import path
 from . import views
 from .dashboard_views import payroll_dashboard
@@ -20,7 +18,6 @@ urlpatterns = [
     path('generate-payslip/<int:pk>/', views.generate_payslip_download, name='generate_payslip'),
 ]
 
-# Serving static and media files during development (only if DEBUG=True)
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

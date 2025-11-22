@@ -340,6 +340,9 @@ import re
 def redirect_to_login(request):
     return redirect('login_view')
 
+from django.http import HttpResponseRedirect
+from django.urls import reverse
+
 def login_view(request):
     context = {}
     context['users'] = UserCustom.objects.all()
@@ -347,6 +350,7 @@ def login_view(request):
     if request.method == "POST" and "password" in request.POST:
         username = request.POST.get("username", "").strip()
         password = request.POST.get("password", "").strip()
+        next_url = request.POST.get("next") or request.GET.get("next") or reverse("dashboard")
         context["selected_user"] = username
 
         try:
@@ -369,11 +373,9 @@ def login_view(request):
 
             request.session["user_id"] = user.id
             request.session["username"] = user.username
-            request.session["user_display_name"] = user.get_full_name() or user.username  # ✅ Added this
+            request.session["user_display_name"] = user.get_full_name() or user.username
 
-            response = HttpResponseRedirect(
-                reverse("set_passcode") if not user.passcode_set else reverse("dashboard")
-            )
+            response = HttpResponseRedirect(next_url)
             response.set_cookie("user_id", user.id)
             response.set_cookie("username", user.username)
             return response
@@ -382,6 +384,7 @@ def login_view(request):
             context["error"] = "Invalid credentials."
 
     return render(request, "registration/login.html", context)
+
 
 
 def set_passcode(request):
