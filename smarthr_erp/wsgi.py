@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-# 👇 Make sure Python can see .python_packages (where GitHub Actions installed deps)
+# Make sure Python can see .python_packages (where GitHub Actions installs deps)
 ROOT_DIR = Path(__file__).resolve().parent.parent  # project root (where manage.py is)
 site_packages = ROOT_DIR / ".python_packages" / "lib" / "site-packages"
 if site_packages.exists():
@@ -10,7 +10,6 @@ if site_packages.exists():
 
 from django.core.wsgi import get_wsgi_application
 
-# Decide settings based on environment variable (like your old project)
 # On Azure → set DJANGO_ENV=deployment
 DJANGO_ENV = os.getenv("DJANGO_ENV", "local").lower()
 
