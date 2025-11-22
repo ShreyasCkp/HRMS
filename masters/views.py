@@ -344,15 +344,22 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 
 from django.shortcuts import render, redirect
-from django.urls import reverse
 from .models import UserCustom
 from django.http import HttpResponseRedirect
+
+from django.shortcuts import render, redirect
+from django.urls import reverse
+from django.http import HttpResponseRedirect
+from .models import UserCustom
 
 
 def login_view(request):
     context = {}
 
-    # ✅ Safely load users for dropdown (if your template uses it)
+    # DEBUG: prove which version is running
+    print("DEBUG: login_view called, method =", request.method)
+
+    # Optional: safely load users (if your template uses them)
     try:
         context['users'] = UserCustom.objects.all()
     except Exception as e:
@@ -370,18 +377,15 @@ def login_view(request):
         context["selected_user"] = username
 
         try:
-            # 👇 case-insensitive username match
             user = UserCustom.objects.get(username__iexact=username)
         except UserCustom.DoesNotExist:
             context["error"] = "Invalid credentials."
             return render(request, "registration/login.html", context)
 
-        # 🔒 Check if account locked
         if getattr(user, "is_locked", False):
             context["error"] = "Account is locked. Contact admin."
             return render(request, "registration/login.html", context)
 
-        # 🔑 Password check (your current plain-text logic)
         if user.password != password:
             user.wrong_attempts = (user.wrong_attempts or 0) + 1
             if user.wrong_attempts >= 3:
@@ -390,11 +394,10 @@ def login_view(request):
             context["error"] = "Invalid password."
             return render(request, "registration/login.html", context)
 
-        # ✅ Successful login → reset wrong attempts
+        # ✅ Successful login
         user.wrong_attempts = 0
         user.save()
 
-        # store session
         request.session["user_id"] = user.id
         request.session["username"] = user.username
         request.session["user_display_name"] = (
@@ -406,8 +409,9 @@ def login_view(request):
         response.set_cookie("username", user.username)
         return response
 
-    # GET → just show login page
+    # GET → always render login page
     return render(request, "registration/login.html", context)
+
 
 
 
