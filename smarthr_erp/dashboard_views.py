@@ -47,14 +47,10 @@ except Exception:
 
 def home_redirect(request):
     """
-    Root URL '/':
-
-    - If NOT logged in → go to login page
-    - If logged in      → go to dashboard
+    Root URL '/' should ALWAYS show login page.
     """
-    if not request.session.get("user_id"):
-        return redirect("login")
-    return redirect("dashboard")
+    return redirect("login")
+
 
 
 @session_login_required

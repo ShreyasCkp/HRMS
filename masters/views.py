@@ -343,18 +343,20 @@ def redirect_to_login(request):
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
-def login_view(request):
-    # if already logged in
-    if request.session.get("user_id"):
-        return redirect("dashboard")
+from django.shortcuts import render, redirect
+from django.urls import reverse
+from .models import UserCustom
+from django.http import HttpResponseRedirect
 
+
+def login_view(request):
     context = {}
 
-    # safe users load
+    # ✅ Safely load users for dropdown (if your template uses it)
     try:
         context['users'] = UserCustom.objects.all()
     except Exception as e:
-        print("Error loading users in login_view:", e)
+        print("LoginView: error loading users list:", e)
         context['users'] = []
 
     if request.method == "POST" and "password" in request.POST:
@@ -368,36 +370,43 @@ def login_view(request):
         context["selected_user"] = username
 
         try:
-            user = UserCustom.objects.get(username=username)
+            # 👇 case-insensitive username match
+            user = UserCustom.objects.get(username__iexact=username)
         except UserCustom.DoesNotExist:
             context["error"] = "Invalid credentials."
             return render(request, "registration/login.html", context)
 
-        if user.is_locked:
+        # 🔒 Check if account locked
+        if getattr(user, "is_locked", False):
             context["error"] = "Account is locked. Contact admin."
             return render(request, "registration/login.html", context)
 
+        # 🔑 Password check (your current plain-text logic)
         if user.password != password:
             user.wrong_attempts = (user.wrong_attempts or 0) + 1
             if user.wrong_attempts >= 3:
                 user.is_locked = True
             user.save()
-            context["error"] = "Invalid credentials."
+            context["error"] = "Invalid password."
             return render(request, "registration/login.html", context)
 
-        # success
+        # ✅ Successful login → reset wrong attempts
         user.wrong_attempts = 0
         user.save()
 
+        # store session
         request.session["user_id"] = user.id
         request.session["username"] = user.username
-        request.session["user_display_name"] = user.get_full_name() or user.username
+        request.session["user_display_name"] = (
+            user.get_full_name() if hasattr(user, "get_full_name") else user.username
+        )
 
-        response = redirect(next_url)
+        response = HttpResponseRedirect(next_url)
         response.set_cookie("user_id", user.id)
         response.set_cookie("username", user.username)
         return response
 
+    # GET → just show login page
     return render(request, "registration/login.html", context)
 
 
