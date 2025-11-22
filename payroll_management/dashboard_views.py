@@ -1,58 +1,101 @@
-# payroll_management/dashboard_views.py
+# smarthr_erp/dashboard_views.py
 
 from datetime import date
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum, Avg
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 
-from .models import Payroll
+# We import inside try/except so that if any app/migration is missing,
+# the dashboard still doesn't crash.
+try:
+    from attendance_management.models import Attendance
+except Exception:
+    Attendance = None
+
+try:
+    from employee_management.models import Employee
+except Exception:
+    Employee = None
+
+try:
+    from leave_management.models import Leave
+except Exception:
+    Leave = None
+
+try:
+    from payroll_management.models import Payroll
+except Exception:
+    Payroll = None
 
 
 @login_required
-def payroll_dashboard(request):
+def home_redirect(request):
     """
-    Simple, safe payroll dashboard for the current month.
-    Works the same on SQLite and Postgres.
+    When someone hits '/', send them to the main dashboard.
     """
+    return redirect("dashboard")
+
+
+@login_required
+def dashboard(request):
+    """
+    Global HR dashboard.
+
+    This version is **defensive**:
+    - Any DB / model / migration error is caught.
+    - The dashboard will still render with zeros instead of crashing with 500.
+    """
+
     today = date.today()
-    current_month = today.strftime("%m")  # '01', '02', ...
-    current_year = today.strftime("%Y")   # '2025'
 
-    # If month is stored as 'YYYY-MM' in a CharField
-    month_key = f"{current_year}-{current_month}"
+    # Defaults (if anything goes wrong, we keep these)
+    total_employees = 0
+    total_payroll_records = 0
+    todays_attendance = 0
+    pending_leaves = 0
+    paid_payroll = 0
+    unpaid_payroll = 0
 
-    # This will work for CharField(month)
-    payrolls = Payroll.objects.filter(month=month_key)
+    # ---- Employees ----
+    try:
+        if Employee is not None:
+            total_employees = Employee.objects.count()
+    except Exception as e:
+        print("Dashboard error: Employee count failed:", e)
 
-    total_processed = payrolls.filter(status="Paid").count()
-    total_pending = payrolls.filter(status="Unpaid").count()
-    pending_amount = (
-        payrolls.filter(status="Unpaid").aggregate(total=Sum("net_salary"))["total"]
-        or 0
-    )
-    avg_salary = payrolls.aggregate(avg=Avg("net_salary"))["avg"] or 0
+    # ---- Payroll ----
+    try:
+        if Payroll is not None:
+            total_payroll_records = Payroll.objects.count()
+            paid_payroll = Payroll.objects.filter(status="Paid").count()
+            unpaid_payroll = Payroll.objects.filter(status="Unpaid").count()
+    except Exception as e:
+        print("Dashboard error: Payroll queries failed:", e)
 
-    # ✅ Total Payroll (sum of net salaries for this month)
-    total_payroll = payrolls.aggregate(total=Sum("net_salary"))["total"] or 0
+    # ---- Attendance (for today) ----
+    try:
+        if Attendance is not None:
+            # Adjust field name if your model uses something else (e.g., 'attendance_date')
+            todays_attendance = Attendance.objects.filter(date=today).count()
+    except Exception as e:
+        print("Dashboard error: Attendance query failed:", e)
 
-    deduction_breakdown = {
-        "income_tax": payrolls.aggregate(total=Sum("income_tax"))["total"] or 0,
-        # placeholders if you add those fields later
-        "health_insurance": 0,
-        "retirement_fund": 0,
-        "social_security": 0,
-        "other": 0,
-    }
+    # ---- Pending leaves ----
+    try:
+        if Leave is not None:
+            # Adjust status value if you use something else (e.g., 'P', 'Pending Approval', etc.)
+            pending_leaves = Leave.objects.filter(status="Pending").count()
+    except Exception as e:
+        print("Dashboard error: Leave query failed:", e)
 
     context = {
-        "payrolls": payrolls,
-        "total_processed": total_processed,
-        "total_pending": total_pending,
-        "pending_amount": pending_amount,
-        "avg_salary": avg_salary,
-        "total_payroll": total_payroll,
-        "deduction_breakdown": deduction_breakdown,
-        "month_name": today.strftime("%B %Y"),  # "November 2025"
+        "today": today,
+        "total_employees": total_employees,
+        "total_payroll_records": total_payroll_records,
+        "todays_attendance": todays_attendance,
+        "pending_leaves": pending_leaves,
+        "paid_payroll": paid_payroll,
+        "unpaid_payroll": unpaid_payroll,
     }
-    return render(request, "payroll_dashboard.html", context)
+
+    return render(request, "dashboard.html", context)

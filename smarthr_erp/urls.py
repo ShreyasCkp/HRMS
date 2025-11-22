@@ -5,9 +5,9 @@ from django.conf.urls.static import static
 from .dashboard_views import dashboard, home_redirect
 from masters.views import login_view, logout_view
 
-
 urlpatterns = [
     path('admin/', admin.site.urls),
+
     path('masters/', include('masters.urls')),
     path('employees/', include('employee_management.urls')),
     path('leaves/', include('leave_management.urls')),
@@ -19,7 +19,6 @@ urlpatterns = [
     path('notifications/', include('notifications.urls')),
     path('reports/', include('reports.urls')),
 
-    # ✅ custom authentication
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
 
