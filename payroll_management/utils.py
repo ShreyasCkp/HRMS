@@ -1,5 +1,5 @@
+# payroll_management/utils.py
 from django.template.loader import get_template
-from django.http import HttpResponse
 from io import BytesIO
 
 def generate_payslip_pdf(template_src, context_dict):
