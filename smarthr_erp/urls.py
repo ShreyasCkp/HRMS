@@ -3,7 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
-from .dashboard_views import dashboard  # 👈 remove home_redirect here
+from .dashboard_views import dashboard   # 👈 home_redirect removed
 from masters.views import login_view, logout_view
 
 urlpatterns = [
@@ -24,7 +24,7 @@ urlpatterns = [
 
     path('dashboard/', dashboard, name='dashboard'),
 
-    # 👇 Root URL ALWAYS goes to login_view
+    # 👇 Root URL ALWAYS goes to login
     path('', login_view, name='home'),
 ]
 
