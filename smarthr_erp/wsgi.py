@@ -2,31 +2,43 @@ import os
 import sys
 from pathlib import Path
 
-# === 1. Point to project root (where manage.py is) ===
-ROOT_DIR = Path(__file__).resolve().parent.parent  # smarthr_erp/ -> project root
+# Resolve project root robustly
+# __file__ will be something like:
+# - /home/site/wwwroot/smarthr_erp/wsgi.py
+#   or
+# - /home/site/wwwroot/python-app/smarthr_erp/wsgi.py
+WSGI_FILE = Path(__file__).resolve()
+PROJECT_DIR = WSGI_FILE.parent              # smarthr_erp
+ROOT_DIR = PROJECT_DIR.parent               # project root
 
-# === 2. Add .python_packages to sys.path (where GitHub Actions installs deps) ===
-site_packages = ROOT_DIR / ".python_packages" / "lib" / "site-packages"
-if site_packages.exists():
-    # Debug print - shows up in Azure logs
-    print(">>> Using .python_packages at:", site_packages)
-    sys.path.insert(0, str(site_packages))
-else:
-    print(">>> .python_packages NOT FOUND at:", site_packages)
+# Try a couple of candidate roots: ROOT_DIR and ROOT_DIR.parent
+# to handle an extra folder (like python-app/)
+candidates = [ROOT_DIR, ROOT_DIR.parent]
 
-# === 3. Normal Django WSGI import ===
-from django.core.wsgi import get_wsgi_application
+site_packages_path = None
+for base in candidates:
+    p = base / ".python_packages" / "lib" / "site-packages"
+    if p.exists():
+        site_packages_path = p
+        sys.path.insert(0, str(p))
+        print(f">>> Using .python_packages at: {p}")
+        break
 
-# === 4. Environment-based settings selection ===
+if site_packages_path is None:
+    print(">>> .python_packages NOT FOUND in candidates:")
+    for base in candidates:
+        print(f"    - {base / '.python_packages' / 'lib' / 'site-packages'}")
+    print(">>> sys.path (truncated):")
+    print(sys.path[:10])
+
+# DJANGO_ENV-based settings selection
 DJANGO_ENV = os.getenv("DJANGO_ENV", "local").lower()
-print(">>> DJANGO_ENV =", DJANGO_ENV)
 
 if DJANGO_ENV == "deployment":
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "smarthr_erp.deployment")
 else:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "smarthr_erp.settings")
 
-print(">>> DJANGO_SETTINGS_MODULE =", os.environ["DJANGO_SETTINGS_MODULE"])
+from django.core.wsgi import get_wsgi_application
 
 application = get_wsgi_application()
-print(">>> WSGI application loaded successfully")
