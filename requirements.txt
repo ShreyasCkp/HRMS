@@ -1,5 +1,5 @@
 # Web framework
-Django==4.2.26
+Django==4.2.25
 
 # WSGI/ASGI & static
 gunicorn==20.1.0
