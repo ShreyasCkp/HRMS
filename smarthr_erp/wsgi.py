@@ -2,54 +2,31 @@ import os
 import sys
 from pathlib import Path
 
-# ---------- DEBUG LOGS ----------
-try:
-    print("WSGI: starting wsgi.py")
-except Exception:
-    pass
+# === 1. Point to project root (where manage.py is) ===
+ROOT_DIR = Path(__file__).resolve().parent.parent  # smarthr_erp/ -> project root
 
-# Project root (where manage.py is)
-ROOT_DIR = Path(__file__).resolve().parent.parent
-
+# === 2. Add .python_packages to sys.path (where GitHub Actions installs deps) ===
 site_packages = ROOT_DIR / ".python_packages" / "lib" / "site-packages"
-
-try:
-    print(f"WSGI: ROOT_DIR = {ROOT_DIR}")
-    print(f"WSGI: site_packages path = {site_packages}")
-    print(f"WSGI: site_packages.exists() = {site_packages.exists()}")
-except Exception:
-    pass
-
 if site_packages.exists():
+    # Debug print - shows up in Azure logs
+    print(">>> Using .python_packages at:", site_packages)
     sys.path.insert(0, str(site_packages))
-    try:
-        print("WSGI: added .python_packages/lib/site-packages to sys.path")
-        print("WSGI: first 5 sys.path entries:", sys.path[:5])
-    except Exception:
-        pass
 else:
-    try:
-        print("WSGI WARNING: .python_packages/lib/site-packages DOES NOT EXIST")
-    except Exception:
-        pass
+    print(">>> .python_packages NOT FOUND at:", site_packages)
 
+# === 3. Normal Django WSGI import ===
 from django.core.wsgi import get_wsgi_application
 
+# === 4. Environment-based settings selection ===
 DJANGO_ENV = os.getenv("DJANGO_ENV", "local").lower()
-try:
-    print(f"WSGI: DJANGO_ENV = {DJANGO_ENV}")
-except Exception:
-    pass
+print(">>> DJANGO_ENV =", DJANGO_ENV)
 
 if DJANGO_ENV == "deployment":
-    os.environ.setdefault(
-        "DJANGO_SETTINGS_MODULE",
-        "smarthr_erp.deployment"
-    )
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "smarthr_erp.deployment")
 else:
-    os.environ.setdefault(
-        "DJANGO_SETTINGS_MODULE",
-        "smarthr_erp.settings"
-    )
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "smarthr_erp.settings")
+
+print(">>> DJANGO_SETTINGS_MODULE =", os.environ["DJANGO_SETTINGS_MODULE"])
 
 application = get_wsgi_application()
+print(">>> WSGI application loaded successfully")
