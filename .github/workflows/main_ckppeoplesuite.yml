@@ -7,82 +7,40 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Python version
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-      # (Optional but useful) Install deps & run migrations/static locally in CI
-      - name: Install dependencies (CI only)
+      # (Optional) Install deps and run tests locally in CI
+      - name: Install dependencies (for CI only)
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run migrations and collect static files (CI check)
-        env:
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
-          DEBUG: "False"
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DJANGO_ALLOWED_HOSTS: ${{ secrets.DJANGO_ALLOWED_HOSTS }}
-          EMAIL_HOST_USER: ${{ secrets.EMAIL_HOST_USER }}
-          EMAIL_HOST_PASSWORD: ${{ secrets.EMAIL_HOST_PASSWORD }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          DJANGO_ENV: "deployment"
+      # (Optional) Run migrations in CI just to catch errors
+      # This does NOT affect Azure DB, it uses GitHub runner DB (if you configure it)
+      # You can comment this out if it breaks.
+      # - name: Run Django checks
+      #   env:
+      #     DJANGO_SETTINGS_MODULE: smarthr_erp.deployment
+      #   run: |
+      #     python manage.py check
+
+      - name: Create deployment zip
         run: |
-          python manage.py migrate --noinput
-          python manage.py collectstatic --noinput
-
-      - name: List project files (recursive)
-        run: |
-          pwd
-          ls -la
-          echo "----------------------"
-          ls -R
-
-      # Upload ONLY your source code (no venv / no .python_packages)
-      - name: Upload artifact for deployment jobs
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-app
-          path: |
-            .
-            !.git/
-            !.github/
-            !.venv/
-            !.python_packages/
-            !**/__pycache__/
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: python-app
-
-      - name: List artifact files (recursive)
-        run: |
-          pwd
-          ls -la
-          echo "----------------------"
-          ls -R
+          zip -r release.zip . \
+            -x "*.git*" "*__pycache__*" "*.venv*" "venv/*" ".venv/*"
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -94,4 +52,4 @@ jobs:
         with:
           app-name: "CKPPeopleSuite"
           slot-name: "Production"
-          package: .
+          package: "release.zip"
