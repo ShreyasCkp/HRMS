@@ -66,7 +66,6 @@ jobs:
             !.git/
             !**/__pycache__/
 
-
   deploy:
     runs-on: ubuntu-latest
     needs: build
@@ -80,9 +79,22 @@ jobs:
         with:
           name: python-app
 
-      - name: List artifact files (recursive)
+      - name: List artifact files BEFORE flatten
         run: |
+          echo "=== ROOT BEFORE ==="
           pwd
+          ls -la
+          echo "----------------------"
+          ls -R
+
+      # 🔹 IMPORTANT: move everything out of python-app/ to root
+      - name: Move app contents to repo root
+        run: |
+          # Move all files (including hidden) from python-app/ to current dir
+          shopt -s dotglob
+          mv python-app/* .
+          rmdir python-app
+          echo "=== ROOT AFTER MOVE ==="
           ls -la
           echo "----------------------"
           ls -R
@@ -98,4 +110,3 @@ jobs:
           app-name: "CKPPeopleSuite"
           slot-name: "Production"
           package: .
-
