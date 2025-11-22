@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read # This is required for actions/checkout
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -20,52 +20,57 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 🛠️ Create virtual environment & install dependencies
-      - name: Create and Start virtual environment and Install dependencies
+      # Install dependencies for CI (to run manage.py) AND into .python_packages for Azure
+      - name: Install dependencies (local + Azure .python_packages)
         run: |
-          python -m venv antenv
-          source antenv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          # Install for local/CI (so manage.py works)
+          python -m pip install --no-cache-dir -r requirements.txt
+          # Install a copy for Azure runtime under .python_packages
+          mkdir -p .python_packages/lib/site-packages
+          python -m pip install --no-cache-dir -r requirements.txt --target=".python_packages/lib/site-packages"
 
-      # 🔧 Run Django migrations & collectstatic using production DB credentials
-      # Make sure these secret names match what you created in GitHub Actions
+      # Run migrations and collectstatic against your Azure DB
       - name: Run migrations and collect static files
         env:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEBUG: "False"
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_PORT: ${{ secrets.DB_PORT }}
-          # Add any other env vars your settings.py expects (DEBUG, ALLOWED_HOSTS, etc.)
+          DJANGO_ALLOWED_HOSTS: ${{ secrets.DJANGO_ALLOWED_HOSTS }}
+          EMAIL_HOST_USER: ${{ secrets.EMAIL_HOST_USER }}
+          EMAIL_HOST_PASSWORD: ${{ secrets.EMAIL_HOST_PASSWORD }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Make sure Django can also see the .python_packages if needed
+          PYTHONPATH: .python_packages/lib/site-packages
         run: |
-          source antenv/bin/activate
           python manage.py migrate --noinput
           python manage.py collectstatic --noinput
 
-      # 📂 List all files in the repo after build & collectstatic
       - name: List project files (recursive)
         run: |
           ls -la
           echo "----------------------"
           ls -R
 
-      # Exclude the virtualenv from the deployment artifact
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
           name: python-app
           path: |
             .
-            !antenv/
+            !.git/
+            !**/__pycache__/
 
   deploy:
     runs-on: ubuntu-latest
     needs: build
     permissions:
-      id-token: write # This is required for requesting the JWT (if needed in future)
-      contents: read  # This is required for actions/checkout
+      id-token: write
+      contents: read
 
     steps:
       - name: Download artifact from build job
@@ -73,14 +78,12 @@ jobs:
         with:
           name: python-app
 
-      # 📂 List all files in the downloaded artifact (debugging)
       - name: List artifact files (recursive)
         run: |
           ls -la
           echo "----------------------"
           ls -R
 
-      # 🔐 Login to Azure using AZURE_CREDENTIALS secret (JSON for service principal)
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -88,9 +91,7 @@ jobs:
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
-        id: deploy-to-webapp
         with:
           app-name: 'CKPPeopleSuite'
           slot-name: 'Production'
-          # Optional: explicitly specify package, if needed
-          # package: .
+          package: .
