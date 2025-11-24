@@ -6,6 +6,8 @@ from functools import wraps
 from django.shortcuts import render, redirect
 from django.db import connection
 from django.db.models import Sum, Count
+from django.http import HttpResponse
+from django.template import TemplateDoesNotExist, TemplateSyntaxError
 
 
 # --------- custom decorator using your session auth ---------
@@ -166,7 +168,8 @@ def dashboard(request):
                 pass
 
     except Exception as e:
-        print("CRITICAL dashboard error:", e)
+        # Any DB/model error will be visible in browser now
+        return HttpResponse(f"CRITICAL dashboard error (data layer): {e}", status=500)
 
     context = {
         "total_employees": total_employees,
@@ -185,4 +188,12 @@ def dashboard(request):
         "payroll_counts": list(salary_ranges.values()),
     }
 
-    return render(request, "dashboard.html", context)
+    # ---- render template, but show clear error if template is missing/broken ----
+    try:
+        return render(request, "dashboard.html", context)
+    except TemplateDoesNotExist as e:
+        return HttpResponse(f"TemplateDoesNotExist: {e}", status=500)
+    except TemplateSyntaxError as e:
+        return HttpResponse(f"TemplateSyntaxError in dashboard.html: {e}", status=500)
+    except Exception as e:
+        return HttpResponse(f"Unexpected error while rendering dashboard: {e}", status=500)
