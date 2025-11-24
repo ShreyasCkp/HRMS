@@ -7,6 +7,7 @@ from django.shortcuts import render, redirect
 from django.db import connection
 from django.db.models import Sum, Count
 
+
 # --------- custom decorator using your session auth ---------
 def session_login_required(view_func):
     @wraps(view_func)
