@@ -5,29 +5,34 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
-from .dashboard_views import dashboard   # no home_redirect here
+from .dashboard_views import dashboard
 from masters.views import login_view, logout_view
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('masters/', include('masters.urls')),
-    path('employees/', include('employee_management.urls')),
-    path('leaves/', include('leave_management.urls')),
-    path('attendance/', include('attendance_management.urls')),
-    path('payroll/', include('payroll_management.urls')),
-    path('performance/', include('performance_management.urls')),
-    path('recruitment/', include('recruitment.urls')),
-    path('chatbot/', include('chatbot.urls')),
-    path('notifications/', include('notifications.urls')),
-    path('reports/', include('reports.urls')),
+    # Admin
+    path("admin/", admin.site.urls),
 
-    path('login/', login_view, name='login'),
-    path('logout/', logout_view, name='logout'),
+    # Auth
+    path("login/", login_view, name="login"),
+    path("logout/", logout_view, name="logout"),
 
-    path('dashboard/', dashboard, name='dashboard'),
+    # App modules
+    path("masters/", include("masters.urls")),
+    path("employees/", include("employee_management.urls")),
+    path("leaves/", include("leave_management.urls")),
+    path("attendance/", include("attendance_management.urls")),
+    path("payroll/", include("payroll_management.urls")),   # ⬅ will use your payroll_dashboard
+    path("performance/", include("performance_management.urls")),
+    path("recruitment/", include("recruitment.urls")),
+    path("chatbot/", include("chatbot.urls")),
+    path("notifications/", include("notifications.urls")),
+    path("reports/", include("reports.urls")),
 
-    # Root URL -> login page
-    path('', login_view, name='home'),
+    # Main dashboard (protected by session_login_required in dashboard_views.py)
+    path("dashboard/", dashboard, name="dashboard"),
+
+    # Root URL → show login page (same view as /login/)
+    path("", login_view, name="home"),
 ]
 
 if settings.DEBUG:

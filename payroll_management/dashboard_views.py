@@ -1,5 +1,3 @@
-# payroll_management/dashboard_views.py
-
 from datetime import date
 from django.db.models import Sum, Avg
 from django.shortcuts import render
