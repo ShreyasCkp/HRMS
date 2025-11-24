@@ -1,11 +1,11 @@
 from django.urls import path
 from . import views
-from .dashboard_views import payroll_dashboard
+from .dashboard_views import payroll_dashboard   
 from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
-    path('dashboard/', payroll_dashboard, name='payroll_dashboard'),
+    path('dashboard/', payroll_dashboard   , name='payroll_dashboard'),
     path('payroll/records/', views.payroll_records, name='payroll_records'),
 
     path('', views.payroll_list, name='payroll_list'),

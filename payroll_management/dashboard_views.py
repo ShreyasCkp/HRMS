@@ -1,10 +1,8 @@
 # payroll_management/dashboard_views.py
 
 from datetime import date
-
 from django.db.models import Sum, Avg
 from django.shortcuts import render
-
 from .models import Payroll
 
 
@@ -16,14 +14,12 @@ def payroll_dashboard(request):
     current_month = today.strftime('%m')
     current_year = today.strftime('%Y')
 
-    # Filter payrolls for current month (YYYY-MM)
     payrolls = Payroll.objects.filter(month__startswith=f"{current_year}-{current_month}")
 
     total_processed = payrolls.filter(status='Paid').count()
     total_pending = payrolls.filter(status='Unpaid').count()
     pending_amount = payrolls.filter(status='Unpaid').aggregate(total=Sum('net_salary'))['total'] or 0
     avg_salary = payrolls.aggregate(avg=Avg('net_salary'))['avg'] or 0
-
     total_payroll = payrolls.aggregate(total=Sum('net_salary'))['total'] or 0
 
     deduction_breakdown = {
