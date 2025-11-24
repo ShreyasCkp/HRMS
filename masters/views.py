@@ -353,13 +353,18 @@ from django.http import HttpResponseRedirect
 from .models import UserCustom
 
 
+# masters/views.py
+
+from django.shortcuts import render
+from django.urls import reverse
+from django.http import HttpResponseRedirect
+from .models import UserCustom
+
+
 def login_view(request):
     context = {}
 
-    # DEBUG: prove which version is running
-    print("DEBUG: login_view called, method =", request.method)
-
-    # Optional: safely load users (if your template uses them)
+    # Optional: load users (if your template uses dropdown)
     try:
         context['users'] = UserCustom.objects.all()
     except Exception as e:
@@ -409,8 +414,9 @@ def login_view(request):
         response.set_cookie("username", user.username)
         return response
 
-    # GET → always render login page
+    # GET → show login page
     return render(request, "registration/login.html", context)
+
 
 
 

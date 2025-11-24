@@ -1,9 +1,11 @@
+# smarthr_erp/urls.py
+
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
-from .dashboard_views import dashboard   # 👈 home_redirect removed
+from .dashboard_views import dashboard   # no home_redirect here
 from masters.views import login_view, logout_view
 
 urlpatterns = [
@@ -24,7 +26,7 @@ urlpatterns = [
 
     path('dashboard/', dashboard, name='dashboard'),
 
-    # 👇 Root URL ALWAYS goes to login
+    # Root URL -> login page
     path('', login_view, name='home'),
 ]
 

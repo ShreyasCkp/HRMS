@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from functools import wraps
 
 from django.shortcuts import render, redirect
+from django.db import connection
 from django.db.models import Sum, Count
 
 # --------- custom decorator using your session auth ---------
@@ -47,10 +48,20 @@ except Exception:
 
 def home_redirect(request):
     """
-    Root URL '/' should ALWAYS show login page.
+    Only used if you still map '' -> home_redirect in urls.py.
+    You can ignore this if root ('') points to login_view.
     """
     return redirect("login")
 
+
+def _table_exists(model):
+    """
+    Avoid 'relation ... does not exist' errors on Azure.
+    Checks if the table for this model actually exists in the DB.
+    """
+    if model is None:
+        return False
+    return model._meta.db_table in connection.introspection.table_names()
 
 
 @session_login_required
@@ -74,11 +85,11 @@ def dashboard(request):
 
     try:
         # Employees
-        if Employee is not None:
+        if Employee is not None and _table_exists(Employee):
             total_employees = Employee.objects.filter(is_active=True).count()
 
         # Leaves
-        if Leave is not None:
+        if Leave is not None and _table_exists(Leave):
             active_leaves = Leave.objects.filter(
                 is_approved=True,
                 start_date__lte=today,
@@ -86,14 +97,14 @@ def dashboard(request):
             ).count()
 
         # Attendance today
-        if Attendance is not None:
+        if Attendance is not None and _table_exists(Attendance):
             present_today = Attendance.objects.filter(
                 date=today,
                 clock_in__isnull=False,
             ).count()
 
         # Payroll + salary ranges
-        if Payroll is not None:
+        if Payroll is not None and _table_exists(Payroll):
             monthly_payroll = (
                 Payroll.objects.filter(status="Paid", month=today.strftime("%Y-%m"))
                 .aggregate(total=Sum("net_salary"))["total"]
@@ -114,19 +125,19 @@ def dashboard(request):
                     salary_ranges["80k+"] += 1
 
         # Recent activity
-        if RecentActivity is not None:
+        if RecentActivity is not None and _table_exists(RecentActivity):
             recent_activities = RecentActivity.objects.order_by("-timestamp")[:10]
 
         # Upcoming events
-        if OfficeEvent is not None:
+        if OfficeEvent is not None and _table_exists(OfficeEvent):
             upcoming_events = OfficeEvent.objects.filter(date__gte=today).order_by("date")[:5]
 
         # Notifications
-        if Notification is not None:
+        if Notification is not None and _table_exists(Notification):
             notifications = Notification.objects.order_by("-created_at")[:10]
 
         # Attendance chart last 7 days
-        if Attendance is not None:
+        if Attendance is not None and _table_exists(Attendance):
             attendance_counts = [
                 Attendance.objects.filter(
                     date=today - timedelta(days=i), clock_in__isnull=False
@@ -135,7 +146,7 @@ def dashboard(request):
             ]
 
         # Leave chart
-        if Leave is not None:
+        if Leave is not None and _table_exists(Leave):
             leave_data = (
                 Leave.objects.filter(leave_type__isnull=False)
                 .values("leave_type__name")
@@ -146,7 +157,7 @@ def dashboard(request):
 
         # Current user display name using your session user_id
         user_id = request.session.get("user_id")
-        if user_id and UserCustom is not None:
+        if user_id and UserCustom is not None and _table_exists(UserCustom):
             try:
                 user = UserCustom.objects.get(id=user_id)
                 user_display_name = user.username
@@ -154,7 +165,7 @@ def dashboard(request):
                 pass
 
     except Exception as e:
-        print("Dashboard error:", e)
+        print("CRITICAL dashboard error:", e)
 
     context = {
         "total_employees": total_employees,
